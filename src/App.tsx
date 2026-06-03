@@ -363,6 +363,11 @@ export default function App() {
               onNavigateToTiffin={() => scrollToAnchor('tiffin-section')} 
             />
             
+            <TiffinPlans 
+              onAddTiffinSubscription={handleAddTiffinSubscriptionToCart} 
+              brandPhone={config.mobileNumber}
+            />
+            
             <MenuSection 
               menu={menu} 
               onAddToCart={handleAddToCart} 
@@ -372,11 +377,6 @@ export default function App() {
             <AboutUs />
             
             <WhyChooseUs />
-            
-            <TiffinPlans 
-              onAddTiffinSubscription={handleAddTiffinSubscriptionToCart} 
-              brandPhone={config.mobileNumber}
-            />
             
             <ReviewsSection 
               reviews={reviews} 

@@ -128,6 +128,8 @@ export default function AdminDashboard({
   const [newItemIsVeg, setNewItemIsVeg] = useState(true);
   const [newItemSpicy, setNewItemSpicy] = useState<MenuItem['spicyLevel']>('Medium');
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
+  const [isMenuFormSaving, setIsMenuFormSaving] = useState(false);
+  const [menuFormError, setMenuFormError] = useState('');
 
   // File upload trigger refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -262,6 +264,9 @@ export default function AdminDashboard({
     e.preventDefault();
     if (!newItemName.trim()) return;
 
+    setIsMenuFormSaving(true);
+    setMenuFormError('');
+
     const payload = {
       name: newItemName.trim(),
       price: Number(newItemPrice),
@@ -300,9 +305,29 @@ export default function AdminDashboard({
         setNewItemPrice(150);
         setNewItemDesc('');
         setNewItemImg('');
+        setMenuFormError('');
+      } else {
+        let errorMsg = 'Failed to publish menu recipe. Server returned error status.';
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            errorMsg = `Server error: ${errData.error}`;
+          }
+        } catch (_) {
+          try {
+            const rawText = await res.text();
+            if (rawText) {
+              errorMsg = `Server error: ${rawText.substring(0, 150)}`;
+            }
+          } catch (__) {}
+        }
+        setMenuFormError(errorMsg);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setMenuFormError(err.message || "Failed to establish a connection to the server. Please check your image size.");
+    } finally {
+      setIsMenuFormSaving(false);
     }
   };
 
@@ -689,7 +714,11 @@ export default function AdminDashboard({
 
               {!isAddingNew && !editingItem && (
                 <button
-                  onClick={() => setIsAddingNew(true)}
+                  onClick={() => {
+                    setMenuFormError('');
+                    setIsMenuFormSaving(false);
+                    setIsAddingNew(true);
+                  }}
                   className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-orange-600 text-white font-bold text-xs rounded-xl hover:bg-orange-700 transition shadow-xs cursor-pointer"
                 >
                   <Plus className="w-4 h-4" /> Add Culinary Recipe
@@ -708,6 +737,7 @@ export default function AdminDashboard({
                     onClick={() => {
                       setIsAddingNew(false);
                       setEditingItem(null);
+                      setMenuFormError('');
                     }}
                     className="text-xs text-neutral-400 hover:text-neutral-600 font-bold"
                   >
@@ -1021,18 +1051,33 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
+                  {menuFormError && (
+                    <div className="p-3 bg-red-50 text-red-800 text-xs rounded-xl border border-red-200 font-medium">
+                      ❌ {menuFormError}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <button
                       type="submit"
-                      className="px-5 py-2.5 bg-orange-600 text-white font-bold text-xs rounded-xl hover:bg-orange-700 transition cursor-pointer shadow-xs"
+                      disabled={isMenuFormSaving}
+                      className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
                     >
-                      {editingItem ? 'Publish Updates' : 'Add Dish to Menu'}
+                      {isMenuFormSaving ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Publishing...</span>
+                        </>
+                      ) : (
+                        <span>{editingItem ? 'Publish Updates' : 'Add Dish to Menu'}</span>
+                      )}
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         setIsAddingNew(false);
                         setEditingItem(null);
+                        setMenuFormError('');
                       }}
                       className="px-5 py-2.5 bg-neutral-100 text-neutral-600 font-bold text-xs border rounded-xl hover:bg-neutral-200 transition cursor-pointer"
                     >
