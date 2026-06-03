@@ -183,6 +183,22 @@ export default function CartDrawer({
         setLoyaltyPoints(nextPointsBalance);
         setUseLoyalty(false);
 
+        // Save order ID to local history
+        try {
+          const stored = localStorage.getItem('bhagwati_order_ids');
+          const ids = stored ? JSON.parse(stored) : [];
+          if (Array.isArray(ids)) {
+            if (!ids.includes(data.orderId)) {
+              ids.push(data.orderId);
+            }
+            localStorage.setItem('bhagwati_order_ids', JSON.stringify(ids));
+          } else {
+            localStorage.setItem('bhagwati_order_ids', JSON.stringify([data.orderId]));
+          }
+        } catch (e) {
+          console.error("Local storage sync error:", e);
+        }
+
         onClearCart();
         onOrderPlaced(data.orderId);
         onClose();

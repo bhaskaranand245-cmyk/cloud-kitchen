@@ -10,10 +10,11 @@ import TiffinPlans from './components/TiffinPlans';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
 import OrderTrack from './components/OrderTrack';
+import MyOrdersPortal from './components/MyOrdersPortal';
 import CartDrawer from './components/CartDrawer';
 import HelpdeskWidget from './components/HelpdeskWidget';
 import { getStructuredSchema, updatePageSEO } from './utils/seo';
-import { ShoppingBag, Phone, ShieldCheck, Utensils, Star, ExternalLink, Globe } from 'lucide-react';
+import { ShoppingBag, Phone, ShieldCheck, Utensils, Star, ExternalLink, Globe, ClipboardList } from 'lucide-react';
 
 export default function App() {
   // Database States loaded from Express Server
@@ -26,7 +27,7 @@ export default function App() {
   // Client Application State
   const [cartItems, setCartItems] = useState<{ [id: string]: number }>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [activeView, setActiveView] = useState<'Store' | 'Admin'>('Store');
+  const [activeView, setActiveView] = useState<'Store' | 'Admin' | 'MyOrders'>('Store');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [appIsLoading, setAppIsLoading] = useState(true);
@@ -237,6 +238,26 @@ export default function App() {
               <span>+91 {config.mobileNumber}</span>
             </a>
 
+            {/* My Orders & Tracking Trigger */}
+            {activeView !== 'Admin' && (
+              <button
+                id="header-my-orders-btn"
+                onClick={() => {
+                  setTrackingOrderId(null);
+                  setActiveView(activeView === 'MyOrders' ? 'Store' : 'MyOrders');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer select-none leading-none ${
+                  activeView === 'MyOrders'
+                    ? 'bg-orange-600 text-white shadow-md shadow-orange-600/15'
+                    : 'bg-orange-50 hover:bg-orange-100/80 text-orange-950 border border-orange-200'
+                }`}
+              >
+                <ClipboardList className="w-3.5 h-3.5 text-orange-600 transition" />
+                <span className="hidden sm:inline">Track Orders 📋</span>
+                <span className="inline sm:hidden">Track</span>
+              </button>
+            )}
+
             {/* View Tab Toggle */}
             <button
               id="header-btn-toggle-view"
@@ -324,6 +345,15 @@ export default function App() {
               />
             </div>
           )
+        ) : activeView === 'MyOrders' ? (
+          <MyOrdersPortal 
+            onSelectOrder={(orderId) => {
+              setTrackingOrderId(orderId);
+              setActiveView('Store');
+            }}
+            onClose={() => setActiveView('Store')}
+            brandPhone={config.mobileNumber}
+          />
         ) : (
           <div>
             {/* USER SITE SECTIONS */}

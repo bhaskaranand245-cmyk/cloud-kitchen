@@ -579,6 +579,23 @@ app.get('/api/orders/:id', (req, res) => {
   res.status(404).json({ error: "Order not found with tracking ID: " + req.params.id });
 });
 
+// Get all orders by customer mobile number
+app.get('/api/orders/by-mobile/:mobile', (req, res) => {
+  const db = loadDB();
+  const mobileInput = req.params.mobile.replace(/\D/g, '');
+  if (!mobileInput) {
+    return res.json([]);
+  }
+  const orders = db.orders.filter((ord: Order) => {
+    const cleanDbMobile = ord.customerMobile.replace(/\D/g, '');
+    // Match either exact or ending suffix match for 10 digits or vice versa
+    return cleanDbMobile === mobileInput || 
+           (cleanDbMobile.length >= 10 && mobileInput.length >= 10 && 
+            (cleanDbMobile.slice(-10) === mobileInput.slice(-10)));
+  });
+  res.json(orders);
+});
+
 // Sales analytics dynamic aggregator for Recharts (Dashboard reports)
 app.get('/api/sales', (req, res) => {
   const db = loadDB();
