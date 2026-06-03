@@ -160,6 +160,25 @@ export default function AdminDashboard({
   const [isConfigSaving, setIsConfigSaving] = useState(false);
   const [configSaveMsg, setConfigSaveMsg] = useState('');
 
+  // Customizable Close Curtain and Hours Setting hooks
+  const [configClosingTime, setConfigClosingTime] = useState(config.closingTime ?? "22:00");
+  const [configOpeningTime, setConfigOpeningTime] = useState(config.openingTime ?? "08:00");
+  const [configIsCloseCurtainEnabled, setConfigIsCloseCurtainEnabled] = useState(config.isCloseCurtainEnabled ?? true);
+  const [configCloseCurtainMessage, setConfigCloseCurtainMessage] = useState(config.closeCurtainMessage ?? "Our kitchen is currently resting (Hours: 10:00 PM to 8:00 AM). You can still browse our curated Pune thali menus, tiffin services, or pre-book slots for tomorrow's feast!");
+
+  // Synchronize with external changes
+  useEffect(() => {
+    setConfigBrand(config.brandName);
+    setConfigPhone(config.mobileNumber);
+    setConfigEmail(config.email);
+    setConfigAddress(config.address);
+    setConfigPincodes(config.allowedPincodes.join(', '));
+    setConfigClosingTime(config.closingTime ?? "22:00");
+    setConfigOpeningTime(config.openingTime ?? "08:00");
+    setConfigIsCloseCurtainEnabled(config.isCloseCurtainEnabled ?? true);
+    setConfigCloseCurtainMessage(config.closeCurtainMessage ?? "Our kitchen is currently resting (Hours: 10:00 PM to 8:00 AM). You can still browse our curated Pune thali menus, tiffin services, or pre-book slots for tomorrow's feast!");
+  }, [config]);
+
   // Coupon creator
   const [newCpCode, setNewCpCode] = useState('');
   const [newCpValue, setNewCpValue] = useState(15);
@@ -348,13 +367,17 @@ export default function AdminDashboard({
           mobileNumber: configPhone,
           email: configEmail,
           address: configAddress,
-          allowedPincodes: parsedPincodes
+          allowedPincodes: parsedPincodes,
+          closingTime: configClosingTime,
+          openingTime: configOpeningTime,
+          isCloseCurtainEnabled: configIsCloseCurtainEnabled,
+          closeCurtainMessage: configCloseCurtainMessage
         })
       });
       if (res.ok) {
         const data = await res.json();
         onUpdateConfig(data.config);
-        setConfigSaveMsg("Business settings configuration updated successfully on server.");
+        setConfigSaveMsg("Business settings configuration & kitchen curfew curfew rules updated successfully on server.");
       }
     } catch (err) {
       setConfigSaveMsg("Connection issue with settings payload.");
@@ -2110,6 +2133,78 @@ export default function AdminDashboard({
                     onChange={(e) => setConfigAddress(e.target.value)}
                     className="w-full px-3.5 py-2 border rounded-xl resize-none"
                   />
+                </div>
+
+                {/* Intelligent Kitchen Curfew & Close Curtain Configurations */}
+                <div className="bg-orange-50/40 border border-orange-200/50 p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-orange-100">
+                    <div className="space-y-0.5">
+                      <h3 className="font-serif font-bold text-neutral-900 text-sm flex items-center gap-1.5">
+                        🌙 Automatic Kitchen resting curfew curtain
+                      </h3>
+                      <p className="text-[10px] text-neutral-500 font-sans">
+                        Drapes a beautiful curtain overlay preventing orders during closing hours, while preserving viewing rights & pre-orders.
+                      </p>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        checked={configIsCloseCurtainEnabled}
+                        onChange={(e) => setConfigIsCloseCurtainEnabled(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                      <span className="ml-2 text-[11px] font-bold text-neutral-700">
+                        {configIsCloseCurtainEnabled ? "Enabled" : "Disabled"}
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[11px] font-bold text-neutral-600 block mb-1">
+                        💤 Closing Time (24h format, e.g. 22:00)
+                      </label>
+                      <input
+                        type="time"
+                        required
+                        value={configClosingTime}
+                        onChange={(e) => setConfigClosingTime(e.target.value)}
+                        className="w-full px-3.5 py-2 border rounded-xl bg-white text-xs font-mono font-bold focus:ring-1 focus:ring-orange-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-neutral-600 block mb-1">
+                        🌅 Opening Time (24h format, e.g. 08:00)
+                      </label>
+                      <input
+                        type="time"
+                        required
+                        value={configOpeningTime}
+                        onChange={(e) => setConfigOpeningTime(e.target.value)}
+                        className="w-full px-3.5 py-2 border rounded-xl bg-white text-xs font-mono font-bold focus:ring-1 focus:ring-orange-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-neutral-600 block mb-1">
+                      📢 Custom Curtain Notice & Call To Action
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      placeholder="e.g. Our kitchen is resting. Browse our menu to plan your next order!"
+                      value={configCloseCurtainMessage}
+                      onChange={(e) => setConfigCloseCurtainMessage(e.target.value)}
+                      className="w-full px-3.5 py-2 border rounded-xl bg-white resize-none text-[11px] leading-relaxed transition focus:ring-1 focus:ring-orange-500 focus:outline-none"
+                    />
+                    <span className="text-[9px] text-neutral-400 block mt-1">
+                      Spiritual context: This message appears instantly on the curated glassmorphism backdrop during off hours.
+                    </span>
+                  </div>
                 </div>
 
                 {configSaveMsg && (

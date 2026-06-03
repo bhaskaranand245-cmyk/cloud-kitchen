@@ -53,6 +53,10 @@ export interface CustomConfig {
   deliveryCharge: number;
   loyaltyPointsPer100: number; // loyalty program
   paymentSettings?: PaymentSettings;
+  closingTime?: string; // 24-hour format, e.g., "22:00"
+  openingTime?: string; // 24-hour format, e.g., "08:00"
+  isCloseCurtainEnabled?: boolean; // overall toggle for active curtains
+  closeCurtainMessage?: string; // elegant notification text shown inside the curtain
 }
 
 export interface PaymentGateway {

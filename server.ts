@@ -53,7 +53,11 @@ const DEFAULT_CONFIG: CustomConfig = {
   gstPercent: 5, // 5% GST for cloud restaurants
   deliveryCharge: 30, // Rs. 30 flat
   loyaltyPointsPer100: 10, // 10 points for every 100 Rs spent
-  paymentSettings: DEFAULT_PAYMENT_SETTINGS
+  paymentSettings: DEFAULT_PAYMENT_SETTINGS,
+  closingTime: "22:00",
+  openingTime: "08:00",
+  isCloseCurtainEnabled: true,
+  closeCurtainMessage: "Our kitchen is currently resting (Hours: 10:00 PM to 8:00 AM). You can still browse our curated Pune thali menus, tiffin services, or pre-book slots for tomorrow's feast!"
 };
 
 // Initial default menu

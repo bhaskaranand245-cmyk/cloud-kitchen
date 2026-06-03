@@ -12,6 +12,7 @@ import AdminLogin from './components/AdminLogin';
 import OrderTrack from './components/OrderTrack';
 import MyOrdersPortal from './components/MyOrdersPortal';
 import CartDrawer from './components/CartDrawer';
+import KitchenCurtain from './components/KitchenCurtain';
 import HelpdeskWidget from './components/HelpdeskWidget';
 import { getStructuredSchema, updatePageSEO } from './utils/seo';
 import { ShoppingBag, Phone, ShieldCheck, Utensils, Star, ExternalLink, Globe, ClipboardList } from 'lucide-react';
@@ -484,6 +485,11 @@ export default function App() {
         onRemove={handleRemove}
         onClearCart={() => setCartItems({})}
         onOrderPlaced={(orderId) => setTrackingOrderId(orderId)}
+      />
+
+      <KitchenCurtain 
+        config={config} 
+        onOpenOrdersHistory={() => setActiveView('MyOrders')} 
       />
 
       <HelpdeskWidget />

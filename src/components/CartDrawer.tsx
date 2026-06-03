@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MenuItem, Coupon, CustomConfig, Order } from '../types';
 import { ShoppingBag, X, Plus, Minus, Trash2, Ticket, Check, CreditCard, ShieldCheck, MessageCircle, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { checkIsKitchenClosed, formatTime12h } from '../utils/time';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -59,6 +60,8 @@ export default function CartDrawer({
   const [isWhatsAppShareEnabled, setIsWhatsAppShareEnabled] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const isCurfewActive = (config?.isCloseCurtainEnabled ?? true) && checkIsKitchenClosed(config?.openingTime, config?.closingTime);
 
   // Re-aggregate selections
   const selectedItems = Object.keys(cartItems).map((id) => {
@@ -678,6 +681,17 @@ export default function CartDrawer({
               </div>
             </div>
 
+            {isCurfewActive && (
+              <div className="p-3.5 bg-red-950/90 border border-orange-500/20 text-orange-200 rounded-xl text-[10px] sm:text-[11px] leading-relaxed font-sans text-left space-y-1">
+                <div className="font-serif font-black text-white flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
+                  🌙 Priority Kitchen Pre-Order Active
+                </div>
+                <div>
+                  Our live culinary ovens are resting right now (until {formatTime12h(config.openingTime ?? "08:00")}). You are placing a high-priority morning reservation. Our tiffin chef will approve first thing at sunrise!
+                </div>
+              </div>
+            )}
+
             {/* Check out buttons */}
             <button
               onClick={() => {
@@ -685,9 +699,18 @@ export default function CartDrawer({
                 if (formBtn) formBtn.click();
               }}
               disabled={isSubmitting}
-              className="w-full inline-flex items-center justify-center py-4 px-6 rounded-2xl bg-orange-600 hover:bg-orange-700 font-bold text-white shadow-lg shadow-orange-600/20 transition cursor-pointer disabled:opacity-50 text-sm"
+              className={`w-full inline-flex items-center justify-center py-4 px-6 rounded-2xl font-bold text-white shadow-lg transition cursor-pointer disabled:opacity-50 text-xs sm:text-sm ${
+                isCurfewActive 
+                  ? 'bg-red-950 hover:bg-red-900 shadow-red-950/20 border border-red-800' 
+                  : 'bg-orange-600 hover:bg-orange-700 shadow-orange-600/20'
+              }`}
             >
-              {isSubmitting ? 'Verifying Secure SSL Gateways...' : `Authorize & Dispatch Order (₹${totalAmount})`}
+              {isSubmitting 
+                ? 'Verifying Secure SSL Gateways...' 
+                : isCurfewActive 
+                  ? `📅 Confirm Next-Day Priority Pre-Order (₹${totalAmount})` 
+                  : `Authorize & Dispatch Order (₹${totalAmount})`
+              }
             </button>
           </div>
         )}
