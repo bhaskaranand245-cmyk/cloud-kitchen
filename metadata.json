@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Bhagwati Cloud Kitchen",
+  "description": "Premium cloud kitchen and tiffin service in India. Authentic, hygienic, fresh home-style pure-veg food delivered in pristine packaging to your doorstep.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
