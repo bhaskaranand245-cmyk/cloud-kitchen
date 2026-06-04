@@ -59,7 +59,7 @@ export default function KitchenCurtain({ config, onOpenOrdersHistory }: KitchenC
   // Let the user browse but keep a subtle reminder
   if (isMinimized) {
     return (
-      <div className="fixed bottom-20 left-4 z-50">
+      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 whitespace-nowrap">
         <motion.button
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}

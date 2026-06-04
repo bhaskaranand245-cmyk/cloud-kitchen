@@ -45,14 +45,17 @@ export default function AdminDashboard({
     config.paymentSettings?.gateways ?? []
   );
 
+  const prevPaymentSettingsRef = useRef<any>(null);
+
   // Sync state if prop changes
   useEffect(() => {
-    if (config.paymentSettings) {
+    if (config.paymentSettings && config.paymentSettings !== prevPaymentSettingsRef.current) {
       setIsTestMode(config.paymentSettings.isTestMode);
       setCodMinOrderValue(config.paymentSettings.codMinOrderValue);
       setPaymentGateways(config.paymentSettings.gateways);
+      prevPaymentSettingsRef.current = config.paymentSettings;
     }
-  }, [config]);
+  }, [config.paymentSettings]);
 
   // Future autopay activation triggers state
   const [dailyTiffinBilling, setDailyTiffinBilling] = useState(true);
@@ -166,17 +169,43 @@ export default function AdminDashboard({
   const [configIsCloseCurtainEnabled, setConfigIsCloseCurtainEnabled] = useState(config.isCloseCurtainEnabled ?? true);
   const [configCloseCurtainMessage, setConfigCloseCurtainMessage] = useState(config.closeCurtainMessage ?? "Our kitchen is currently resting (Hours: 10:00 PM to 8:00 AM). You can still browse our curated Pune thali menus, tiffin services, or pre-book slots for tomorrow's feast!");
 
-  // Synchronize with external changes
+  const prevConfigRef = useRef<any>(null);
+
+  // Synchronize with external changes safely to prevent overwriting user input as they type
   useEffect(() => {
-    setConfigBrand(config.brandName);
-    setConfigPhone(config.mobileNumber);
-    setConfigEmail(config.email);
-    setConfigAddress(config.address);
-    setConfigPincodes(config.allowedPincodes.join(', '));
-    setConfigClosingTime(config.closingTime ?? "22:00");
-    setConfigOpeningTime(config.openingTime ?? "08:00");
-    setConfigIsCloseCurtainEnabled(config.isCloseCurtainEnabled ?? true);
-    setConfigCloseCurtainMessage(config.closeCurtainMessage ?? "Our kitchen is currently resting (Hours: 10:00 PM to 8:00 AM). You can still browse our curated Pune thali menus, tiffin services, or pre-book slots for tomorrow's feast!");
+    if (config && config !== prevConfigRef.current) {
+      const prev = prevConfigRef.current;
+      
+      if (!prev || prev.brandName !== config.brandName) {
+        setConfigBrand(config.brandName);
+      }
+      if (!prev || prev.mobileNumber !== config.mobileNumber) {
+        setConfigPhone(config.mobileNumber);
+      }
+      if (!prev || prev.email !== config.email) {
+        setConfigEmail(config.email);
+      }
+      if (!prev || prev.address !== config.address) {
+        setConfigAddress(config.address);
+      }
+      if (!prev || prev.allowedPincodes.join(', ') !== config.allowedPincodes.join(', ')) {
+        setConfigPincodes(config.allowedPincodes.join(', '));
+      }
+      if (!prev || prev.closingTime !== config.closingTime) {
+        setConfigClosingTime(config.closingTime ?? "22:00");
+      }
+      if (!prev || prev.openingTime !== config.openingTime) {
+        setConfigOpeningTime(config.openingTime ?? "08:00");
+      }
+      if (!prev || prev.isCloseCurtainEnabled !== config.isCloseCurtainEnabled) {
+        setConfigIsCloseCurtainEnabled(config.isCloseCurtainEnabled ?? true);
+      }
+      if (!prev || prev.closeCurtainMessage !== config.closeCurtainMessage) {
+        setConfigCloseCurtainMessage(config.closeCurtainMessage ?? "Our kitchen is currently resting (Hours: 10:00 PM to 8:00 AM). You can still browse our curated Pune thali menus, tiffin services, or pre-book slots for tomorrow's feast!");
+      }
+      
+      prevConfigRef.current = config;
+    }
   }, [config]);
 
   // Coupon creator
