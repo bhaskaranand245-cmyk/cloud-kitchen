@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Review } from '../types';
 import { Star, CheckCircle, RefreshCw } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface ReviewsSectionProps {
   reviews: Review[];
@@ -155,39 +155,52 @@ export default function ReviewsSection({ reviews, onSubmitReview }: ReviewsSecti
 
           {/* Reviews List */}
           <div className="lg:col-span-2 space-y-6 max-h-[85vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-200">
-            {reviews.map((rev) => (
-              <div key={rev.id} className="bg-white p-6 rounded-2xl border border-neutral-200/50 shadow-xs space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-bold text-neutral-900">{rev.name}</h4>
-                    <span className="text-[10px] text-neutral-400 font-medium font-sans">
-                      {new Date(rev.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}
-                    </span>
+            <AnimatePresence initial={false}>
+              {reviews.map((rev) => (
+                <motion.div
+                  key={rev.id}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.35, ease: 'easeOut' }}
+                  className="bg-white p-6 rounded-2xl border border-neutral-200/50 shadow-xs space-y-4"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-bold text-neutral-900">{rev.name}</h4>
+                      <span className="text-[10px] text-neutral-400 font-medium font-sans">
+                        {new Date(rev.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <div className="flex gap-0.5 text-amber-500 bg-amber-50 px-2 py-1 rounded-lg">
+                      {Array.from({ length: rev.rating }).map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex gap-0.5 text-amber-500 bg-amber-50 px-2 py-1 rounded-lg">
-                    {Array.from({ length: rev.rating }).map((_, i) => (
-                      <Star key={i} className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                    ))}
-                  </div>
-                </div>
 
-                <p className="text-xs sm:text-sm text-neutral-700 font-sans leading-relaxed">
-                  &ldquo;{rev.comment}&rdquo;
-                </p>
+                  <p className="text-xs sm:text-sm text-neutral-700 font-sans leading-relaxed">
+                    &ldquo;{rev.comment}&rdquo;
+                  </p>
 
-                {/* Simulated Owner Reply */}
-                {rev.replyText && (
-                  <div className="bg-orange-50/60 p-4 rounded-xl border border-orange-100/60 space-y-1.5">
-                    <p className="text-[11px] uppercase tracking-widest font-extrabold text-orange-700 flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5" /> Response from Cloud Kitchen Owner
-                    </p>
-                    <p className="text-xs text-neutral-600 italic">
-                      &ldquo;{rev.replyText}&rdquo;
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
+                  {/* Simulated Owner Reply */}
+                  {rev.replyText && (
+                    <div className="bg-orange-50/60 p-4 rounded-xl border border-orange-100/60 space-y-1.5 transition-colors hover:bg-orange-50 duration-200">
+                      <p className="text-[11px] uppercase tracking-widest font-extrabold text-orange-700 flex items-center gap-1.5">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                        </span>
+                        <Sparkles className="w-3.5 h-3.5 text-orange-500 animate-pulse" /> Instant Response from Cloud Kitchen Owner
+                      </p>
+                      <p className="text-xs text-neutral-600 italic leading-relaxed">
+                        &ldquo;{rev.replyText}&rdquo;
+                      </p>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
 
         </div>

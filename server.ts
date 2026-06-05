@@ -450,14 +450,60 @@ app.post('/api/menu/reorder', (req, res) => {
 });
 
 // Manage reviews
-app.post('/api/reviews', (req, res) => {
+app.post('/api/reviews', async (req, res) => {
   const db = loadDB();
+  const { name, rating, comment } = req.body;
+  
+  if (!name) {
+    return res.status(400).json({ error: "Missing reviewer name" });
+  }
+
+  let generatedReply = "";
+  
+  // Instantly generate a response using Gemini for extreme customer satisfaction
+  const ai = getGeminiClient();
+  if (ai) {
+    try {
+      const prompt = `Write a polite, warm, and personalized 1-to-2 sentence owner reply greeting to a customer review for Bhagwati Cloud Kitchen, Pune.
+      Customer Name: "${name}"
+      Rating Given: ${rating} out of 5 stars
+      Customer Review: "${comment || 'Loved the food!'}"
+      Signature: Bhagwati Cloud Kitchen Team. Preserve standard warm Indian greeting tone (e.g. Namaste / Thank you). Keep it direct, heartfelt, and human-sounding (avoid buzzwords, be humble). Mention how we appreciate their support for authentic homemade veg and tiffin services.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+      });
+
+      if (response && response.text) {
+        generatedReply = response.text.trim();
+      }
+    } catch (error) {
+      console.error("Instant Gemini review reply failed:", error);
+    }
+  }
+
+  // Fallback high-quality replies if Gemini is not configured or fails
+  if (!generatedReply) {
+    if (rating >= 4) {
+      generatedReply = `Namaste ${name}! Thank you so much for the wonderful ${rating}-star review. Our kitchen team is absolutely delighted to hear your kind words about our authentic homemade meals. We look forward to serving you again soon! - Bhagwati Cloud Kitchen Team`;
+    } else if (rating === 3) {
+      generatedReply = `Namaste ${name}. Thank you for your feedback. We appreciate your review and will double our efforts to improve our service and flavor profile to give you a 5-star experience next time! - Bhagwati Cloud Kitchen Team`;
+    } else {
+      generatedReply = `Namaste ${name}. We are truly sorry to hear that your experience did not meet expectations. We take hygiene and taste very seriously. Please reach out to our helpline so we can address your concerns immediately. - Bhagwati Cloud Kitchen Team`;
+    }
+  }
+
   const newReview: Review = {
     id: 'r' + (db.reviews.length + 1) + '-' + Math.floor(Math.random() * 1000),
-    isApproved: true, // Default true for simple demo flows
+    isApproved: true, 
     date: new Date().toISOString(),
-    ...req.body
+    name,
+    rating,
+    comment,
+    replyText: generatedReply
   };
+
   db.reviews.unshift(newReview);
   saveDB(db);
   res.json({ message: "Review posted successfully", review: newReview, reviews: db.reviews });
@@ -590,7 +636,12 @@ app.post('/api/orders', (req, res) => {
 // Update order details (live status tracking as admin)
 app.put('/api/orders/:id', (req, res) => {
   const db = loadDB();
-  const index = db.orders.findIndex((ord: Order) => ord.id === req.params.id);
+  const inputId = req.params.id.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const index = db.orders.findIndex((ord: Order) => {
+    if (!ord || !ord.id) return false;
+    const dbId = ord.id.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return dbId === inputId || dbId.endsWith(inputId) || inputId.endsWith(dbId);
+  });
   if (index !== -1) {
     db.orders[index] = { ...db.orders[index], ...req.body };
     saveDB(db);
@@ -602,7 +653,12 @@ app.put('/api/orders/:id', (req, res) => {
 // Get individual order for live tracking check
 app.get('/api/orders/:id', (req, res) => {
   const db = loadDB();
-  const order = db.orders.find((ord: Order) => ord.id === req.params.id);
+  const inputId = req.params.id.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const order = db.orders.find((ord: Order) => {
+    if (!ord || !ord.id) return false;
+    const dbId = ord.id.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return dbId === inputId || dbId.endsWith(inputId) || inputId.endsWith(dbId);
+  });
   if (order) {
     return res.json(order);
   }
@@ -617,11 +673,15 @@ app.get('/api/orders/by-mobile/:mobile', (req, res) => {
     return res.json([]);
   }
   const orders = db.orders.filter((ord: Order) => {
-    const cleanDbMobile = ord.customerMobile.replace(/\D/g, '');
-    // Match either exact or ending suffix match for 10 digits or vice versa
+    if (!ord) return false;
+    const dbMobileRaw = ord.customerMobile !== undefined && ord.customerMobile !== null ? String(ord.customerMobile) : '';
+    const cleanDbMobile = dbMobileRaw.replace(/\D/g, '');
+    // Match either exact or ending suffix match for 10 digits or vice versa or inclusion
     return cleanDbMobile === mobileInput || 
            (cleanDbMobile.length >= 10 && mobileInput.length >= 10 && 
-            (cleanDbMobile.slice(-10) === mobileInput.slice(-10)));
+            (cleanDbMobile.slice(-10) === mobileInput.slice(-10))) ||
+           (cleanDbMobile && mobileInput.includes(cleanDbMobile)) || 
+           (mobileInput && cleanDbMobile.includes(mobileInput));
   });
   res.json(orders);
 });

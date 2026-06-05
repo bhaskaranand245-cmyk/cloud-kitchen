@@ -128,7 +128,24 @@ export default function MyOrdersPortal({ onSelectOrder, onClose, brandPhone }: M
     try {
       const res = await fetch(`/api/orders/${cleanId}`);
       if (res.ok) {
-        onSelectOrder(cleanId);
+        const matchingOrder = await res.json();
+        const canonicalId = matchingOrder.id;
+
+        // Persist in local storage so customer keeps it on history
+        try {
+          const stored = localStorage.getItem('bhagwati_order_ids');
+          const ids = stored ? JSON.parse(stored) : [];
+          if (Array.isArray(ids)) {
+            if (!ids.includes(canonicalId)) {
+              ids.push(canonicalId);
+              localStorage.setItem('bhagwati_order_ids', JSON.stringify(ids));
+            }
+          }
+        } catch (storageErr) {
+          console.error("Local storage sync error:", storageErr);
+        }
+
+        onSelectOrder(canonicalId);
       } else {
         setIdError(`Order ID "${cleanId}" not found in Bhagwati central records. Try again or check spelling.`);
       }
