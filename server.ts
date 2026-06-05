@@ -335,9 +335,13 @@ const DEFAULT_ORDERS: Order[] = [
   }
 ];
 
+// Shared in-memory DB cache to prevent file read conflicts and accidental resets
+let cachedDB: any = null;
+
 // Write Database safely and atomically using renameSync
 function saveDB(data: any) {
   try {
+    cachedDB = data; // Always update in-memory cache first
     fs.writeFileSync(TEMP_DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(TEMP_DB_FILE, DB_FILE);
   } catch (err) {
@@ -353,30 +357,52 @@ function saveDB(data: any) {
 
 // Load Database safely
 function loadDB() {
-  if (!fs.existsSync(DB_FILE)) {
-    const data = {
-      config: DEFAULT_CONFIG,
-      menu: DEFAULT_MENU,
-      reviews: DEFAULT_REVIEWS,
-      coupons: DEFAULT_COUPONS,
-      orders: DEFAULT_ORDERS
-    };
-    saveDB(data);
-    return data;
-  }
   try {
+    if (!fs.existsSync(DB_FILE)) {
+      if (cachedDB) return cachedDB;
+      const data = {
+        config: DEFAULT_CONFIG,
+        menu: DEFAULT_MENU,
+        reviews: DEFAULT_REVIEWS,
+        coupons: DEFAULT_COUPONS,
+        orders: DEFAULT_ORDERS
+      };
+      saveDB(data);
+      return data;
+    }
+
     const content = fs.readFileSync(DB_FILE, 'utf-8');
     if (!content || !content.trim()) {
+      if (cachedDB) {
+        console.warn("Database file was empty, serving from in-memory cache.");
+        return cachedDB;
+      }
       throw new Error("Local database file is empty");
     }
+
     const db = JSON.parse(content);
-    if (db && db.config && !db.config.paymentSettings) {
-      db.config.paymentSettings = DEFAULT_PAYMENT_SETTINGS;
-      saveDB(db);
+    if (db && db.config) {
+      if (!db.config.paymentSettings) {
+        db.config.paymentSettings = DEFAULT_PAYMENT_SETTINGS;
+        saveDB(db);
+      }
+      cachedDB = db; // Update cache
+      return db;
     }
-    return db;
+    
+    if (cachedDB) return cachedDB;
+    throw new Error("Invalid database schema");
   } catch (error) {
-    console.error("Error reading database file, resetting to defaults...", error);
+    console.error("Error reading database file:", error);
+    
+    // Crucial defense: If we have an in-memory cache, NEVER reset the database. Serve the cache!
+    if (cachedDB) {
+      console.log("Serving cached database instead of resetting to defaults.");
+      return cachedDB;
+    }
+    
+    // Fallback as absolute last resort (only on initial server startup if file is corrupted)
+    console.log("No database cache found, initializing first-time default records.");
     const data = {
       config: DEFAULT_CONFIG,
       menu: DEFAULT_MENU,

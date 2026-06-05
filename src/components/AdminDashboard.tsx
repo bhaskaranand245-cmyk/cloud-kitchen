@@ -2237,7 +2237,12 @@ export default function AdminDashboard({
                 </div>
 
                 {configSaveMsg && (
-                  <p className="p-3 bg-green-50 border border-green-100 text-green-700 font-bold rounded-lg">{configSaveMsg}</p>
+                  <p className="p-3.5 bg-emerald-50/80 border border-emerald-100/80 text-emerald-905 font-medium text-[11px] rounded-xl flex items-center gap-2 shadow-xs transition-all duration-300 select-none animate-fade-in">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100">
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    </span>
+                    <span>{configSaveMsg}</span>
+                  </p>
                 )}
 
                 <button
