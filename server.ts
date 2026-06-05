@@ -15,9 +15,20 @@ const PORT = 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Express cache-busting middleware for API endpoints
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 // Initialize file-based database paths
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
+const TEMP_DB_FILE = path.join(DATA_DIR, 'db.temp.json');
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -324,7 +335,23 @@ const DEFAULT_ORDERS: Order[] = [
   }
 ];
 
-// Load Database
+// Write Database safely and atomically using renameSync
+function saveDB(data: any) {
+  try {
+    fs.writeFileSync(TEMP_DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(TEMP_DB_FILE, DB_FILE);
+  } catch (err) {
+    console.error("Fatal error writing database:", err);
+    // Fallback if renaming is blocked by OS locking permissions
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (e) {
+      console.error("Fatal failure on absolute direct write fallback:", e);
+    }
+  }
+}
+
+// Load Database safely
 function loadDB() {
   if (!fs.existsSync(DB_FILE)) {
     const data = {
@@ -334,15 +361,18 @@ function loadDB() {
       coupons: DEFAULT_COUPONS,
       orders: DEFAULT_ORDERS
     };
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    saveDB(data);
     return data;
   }
   try {
     const content = fs.readFileSync(DB_FILE, 'utf-8');
+    if (!content || !content.trim()) {
+      throw new Error("Local database file is empty");
+    }
     const db = JSON.parse(content);
     if (db && db.config && !db.config.paymentSettings) {
       db.config.paymentSettings = DEFAULT_PAYMENT_SETTINGS;
-      fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+      saveDB(db);
     }
     return db;
   } catch (error) {
@@ -354,14 +384,9 @@ function loadDB() {
       coupons: DEFAULT_COUPONS,
       orders: DEFAULT_ORDERS
     };
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    saveDB(data);
     return data;
   }
-}
-
-// Write Database
-function saveDB(data: any) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 // REST API Handlers
