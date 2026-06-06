@@ -94,7 +94,7 @@ export default function AdminLogin({ onLoginSuccess, onCancel, brandName = "Bhag
                 <input
                   type="email"
                   required
-                  placeholder="admin@bhagwati.com"
+                  placeholder=""
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-orange-600 font-semibold"

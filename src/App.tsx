@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MenuItem, Order, Review, Coupon, CustomConfig } from './types';
+import { MenuItem, Order, Review, Coupon, CustomConfig, Enquiry } from './types';
 import Hero from './components/Hero';
 import AboutUs from './components/AboutUs';
 import MenuSection from './components/MenuSection';
@@ -24,6 +24,7 @@ export default function App() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
 
   // Client Application State
   const [cartItems, setCartItems] = useState<{ [id: string]: number }>({});
@@ -45,6 +46,7 @@ export default function App() {
         setReviews(data.reviews);
         setCoupons(data.coupons);
         setOrders(data.orders);
+        setEnquiries(data.enquiries || []);
       }
     } catch (err) {
       console.error("Failed connecting to Bhagwati database:", err);
@@ -338,11 +340,13 @@ export default function App() {
                 reviews={reviews}
                 coupons={coupons}
                 config={config}
+                enquiries={enquiries}
                 onUpdateMenu={setMenu}
                 onUpdateConfig={setConfig}
                 onUpdateReviews={setReviews}
                 onUpdateCoupons={setCoupons}
                 onUpdateOrders={setOrders}
+                onUpdateEnquiries={setEnquiries}
               />
             </div>
           )

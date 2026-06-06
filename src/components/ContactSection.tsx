@@ -14,20 +14,40 @@ export default function ContactSection({ config }: ContactSectionProps) {
   const [isSending, setIsSending] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !message.trim()) return;
 
     setIsSending(true);
     setStatusMsg('');
 
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/enquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          subject: subject,
+          message: message.trim()
+        })
+      });
+
+      if (res.ok) {
+        setStatusMsg("Thank you! Your catering inquiry was delivered to the kitchen managers. We will phone you back in 10-15 minutes.");
+        setName('');
+        setEmail('');
+        setMessage('');
+      } else {
+        const errorData = await res.json();
+        setStatusMsg(errorData.error || "Failed to submit inquiry. Please try calling us instead.");
+      }
+    } catch (err) {
+      console.error("Transmitting inquiry failed:", err);
+      setStatusMsg("Connectivity issue. Please check your network and try again.");
+    } finally {
       setIsSending(false);
-      setStatusMsg("Thank you! Your catering inquiry was delivered to the kitchen managers. We will phone you back in 10-15 minutes.");
-      setName('');
-      setEmail('');
-      setMessage('');
-    }, 1200);
+    }
   };
 
   // WhatsApp formatted ordering layout URL

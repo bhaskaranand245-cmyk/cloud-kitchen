@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MenuItem, Order, Review, Coupon, CustomConfig, PaymentGateway, PaymentSettings } from '../types';
+import { MenuItem, Order, Review, Coupon, CustomConfig, PaymentGateway, PaymentSettings, Enquiry } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
@@ -16,11 +16,13 @@ interface AdminDashboardProps {
   reviews: Review[];
   coupons: Coupon[];
   config: CustomConfig;
+  enquiries: Enquiry[];
   onUpdateMenu: (updatedMenu: MenuItem[]) => void;
   onUpdateConfig: (updatedConfig: CustomConfig) => void;
   onUpdateReviews: (updatedReviews: Review[]) => void;
   onUpdateCoupons: (updatedCoupons: Coupon[]) => void;
   onUpdateOrders: (updatedOrders: Order[]) => void;
+  onUpdateEnquiries: (updatedEnquiries: Enquiry[]) => void;
 }
 
 export default function AdminDashboard({
@@ -29,14 +31,16 @@ export default function AdminDashboard({
   reviews,
   coupons,
   config,
+  enquiries = [],
   onUpdateMenu,
   onUpdateConfig,
   onUpdateReviews,
   onUpdateCoupons,
-  onUpdateOrders
+  onUpdateOrders,
+  onUpdateEnquiries
 }: AdminDashboardProps) {
   // Navigation
-  const [activeTab, setActiveTab] = useState<'Stats' | 'Menu' | 'Orders' | 'Config' | 'Coupons' | 'Reviews' | 'Payments'>('Stats');
+  const [activeTab, setActiveTab] = useState<'Stats' | 'Menu' | 'Orders' | 'Config' | 'Coupons' | 'Reviews' | 'Payments' | 'Enquiries'>('Stats');
 
   // Payment Configuration States
   const [isTestMode, setIsTestMode] = useState(config.paymentSettings?.isTestMode ?? true);
@@ -115,6 +119,15 @@ export default function AdminDashboard({
       setIsPaymentSettingsSaving(false);
     }
   };
+
+  // Support Enquiries State Managers
+  const [enquirySearchQuery, setEnquirySearchQuery] = useState('');
+  const [enquiryFilter, setEnquiryFilter] = useState<'All' | 'Pending' | 'Resolved'>('All');
+  const [isEnquirySubmitting, setIsEnquirySubmitting] = useState<{ [id: string]: boolean }>({});
+  const [enquiryDraftText, setEnquiryDraftText] = useState<{ [id: string]: string }>({});
+  const [isEnquiryDrafting, setIsEnquiryDrafting] = useState<{ [id: string]: boolean }>({});
+  const [enquiryActionMsg, setEnquiryActionMsg] = useState('');
+  const [enquiryActionError, setEnquiryActionError] = useState('');
 
   // Stats Analytics
   const [analytics, setAnalytics] = useState<any>(null);
@@ -520,6 +533,124 @@ export default function AdminDashboard({
     }
   };
 
+  // Support Enquiries Handler Operations
+  const handleGenerateEnquiryReply = async (enq: Enquiry) => {
+    setEnquiryActionMsg('');
+    setEnquiryActionError('');
+    setIsEnquiryDrafting(prev => ({ ...prev, [enq.id]: true }));
+
+    try {
+      const res = await fetch('/api/gemini/reply-enquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: enq.name,
+          subject: enq.subject,
+          message: enq.message
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEnquiryDraftText(prev => ({ ...prev, [enq.id]: data.replyText }));
+        setEnquiryActionMsg(`AI draft suggestions generated for ${enq.name}!`);
+      } else {
+        setEnquiryActionError("Could not connect with Gemini drafting endpoint.");
+      }
+    } catch (err) {
+      console.error(err);
+      setEnquiryActionError("Error communicating with AI services.");
+    } finally {
+      setIsEnquiryDrafting(prev => ({ ...prev, [enq.id]: false }));
+    }
+  };
+
+  const handlePublishEnquiryReply = async (enqId: string) => {
+    setEnquiryActionMsg('');
+    setEnquiryActionError('');
+    const replyText = enquiryDraftText[enqId] || '';
+    if (!replyText.trim()) {
+      setEnquiryActionError("Please supply or generate a response text first.");
+      return;
+    }
+
+    setIsEnquirySubmitting(prev => ({ ...prev, [enqId]: true }));
+    try {
+      const res = await fetch(`/api/enquiries/${enqId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Resolved',
+          replyText: replyText.trim()
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        onUpdateEnquiries(data.enquiries);
+        setEnquiryActionMsg("🎉 Customer enquiry resolved and response reply registered!");
+      } else {
+        setEnquiryActionError("Failed to update enquiry status on server.");
+      }
+    } catch (err) {
+      console.error(err);
+      setEnquiryActionError("Error updating enquiry status.");
+    } finally {
+      setIsEnquirySubmitting(prev => ({ ...prev, [enqId]: false }));
+    }
+  };
+
+  const handleMarkAsResolvedDirectly = async (enqId: string) => {
+    setEnquiryActionMsg('');
+    setEnquiryActionError('');
+    setIsEnquirySubmitting(prev => ({ ...prev, [enqId]: true }));
+    try {
+      const res = await fetch(`/api/enquiries/${enqId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Resolved',
+          replyText: 'Resolved directly in-person / via phone callback.'
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        onUpdateEnquiries(data.enquiries);
+        setEnquiryActionMsg("✅ Marked enquiry as solved directly via phone contact.");
+      } else {
+        setEnquiryActionError("Failed to update enquiry on server.");
+      }
+    } catch (err) {
+      console.error(err);
+      setEnquiryActionError("Error communicating with server.");
+    } finally {
+      setIsEnquirySubmitting(prev => ({ ...prev, [enqId]: false }));
+    }
+  };
+
+  const handleDeleteEnquiry = async (enqId: string) => {
+    setEnquiryActionMsg('');
+    setEnquiryActionError('');
+    if (!confirm("Are you sure you want to permanently delete this customer enquiry from archives?")) return;
+
+    try {
+      const res = await fetch(`/api/enquiries/${enqId}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        onUpdateEnquiries(data.enquiries);
+        setEnquiryActionMsg("🗑️ Customer enquiry permanently removed from database.");
+      } else {
+        setEnquiryActionError("Failed to delete enquiry from server.");
+      }
+    } catch (err) {
+      console.error(err);
+      setEnquiryActionError("Error purging enquiry.");
+    }
+  };
+
   // physical Excel printable spreadsheet table exporter helper
   const handleExportCSV = () => {
     if (!analytics) return;
@@ -545,6 +676,25 @@ export default function AdminDashboard({
     link.click();
     document.body.removeChild(link);
   };
+
+  // Support helpdesk enquiry filters & stats metrics
+  const filteredEnquiries = enquiries.filter(enq => {
+    const matchesSearch = 
+      enq.name.toLowerCase().includes(enquirySearchQuery.toLowerCase()) ||
+      (enq.email || '').toLowerCase().includes(enquirySearchQuery.toLowerCase()) ||
+      enq.subject.toLowerCase().includes(enquirySearchQuery.toLowerCase()) ||
+      enq.message.toLowerCase().includes(enquirySearchQuery.toLowerCase());
+
+    const matchesTab = 
+      enquiryFilter === 'All' || 
+      enq.status === enquiryFilter;
+
+    return matchesSearch && matchesTab;
+  });
+
+  const totalEnquiriesCount = enquiries.length;
+  const pendingEnquiriesCount = enquiries.filter(e => e.status === 'Pending').length;
+  const resolvedEnquiriesCount = enquiries.filter(e => e.status === 'Resolved').length;
 
   // Recharts color palettes
   const COLORS = ['#EA580C', '#800020', '#D4AF37', '#059669', '#2563EB', '#D97706', '#DB2777'];
@@ -604,6 +754,15 @@ export default function AdminDashboard({
               }`}
             >
               <Star className="w-4 h-4 text-amber-400" /> Reviews Approver ({reviews.length})
+            </button>
+
+            <button
+              onClick={() => setActiveTab('Enquiries')}
+              className={`w-full text-left py-2.5 px-4 rounded-xl text-xs font-bold flex items-center gap-2.5 transition cursor-pointer ${
+                activeTab === 'Enquiries' ? 'bg-orange-600 text-white shadow-md' : 'text-neutral-300 hover:bg-white/5'
+              }`}
+            >
+              <MessageSquareCode className="w-4 h-4 text-amber-400" /> Support Enquiries ({enquiries.length})
             </button>
 
             <button
@@ -2254,6 +2413,256 @@ export default function AdminDashboard({
                 </button>
               </form>
             </div>
+          </div>
+        )}
+
+        {/* SUPPORT ENQUIRIES PANEL */}
+        {activeTab === 'Enquiries' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-xl font-serif font-black text-neutral-900">Bhagwati Customer Support Desk</h3>
+                <p className="text-xs text-neutral-500 font-sans mt-0.5">Manage, track, resolve and reply with Gemini to customer catering and subscription inquiries.</p>
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="bg-white p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex items-center gap-4">
+                <div className="p-3 bg-neutral-100 text-neutral-700 rounded-xl">
+                  <MessageSquareCode className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-neutral-400 font-sans">Total Inquiries</p>
+                  <p className="text-2xl font-bold font-mono text-neutral-900">{totalEnquiriesCount}</p>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex items-center gap-4">
+                <div className="p-3 bg-orange-100 text-orange-700 rounded-xl">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-neutral-400 font-sans">Pending Resolution</p>
+                  <p className="text-2xl font-bold font-mono text-neutral-900 flex items-center gap-2">
+                    {pendingEnquiriesCount}
+                    {pendingEnquiriesCount > 0 && (
+                      <span className="text-[10px] font-sans font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full animate-pulse border border-amber-200">Needs Reply</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex items-center gap-4">
+                <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl">
+                  <Check className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-neutral-400 font-sans">Resolved & Satisfied</p>
+                  <p className="text-2xl font-bold font-mono text-neutral-900">{resolvedEnquiriesCount}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Alert feedbacks */}
+            {enquiryActionMsg && (
+              <div className="p-3.5 bg-emerald-50 text-emerald-900 border border-emerald-100 text-xs rounded-xl flex items-center gap-2 select-none">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                </span>
+                <span>{enquiryActionMsg}</span>
+              </div>
+            )}
+            {enquiryActionError && (
+              <div className="p-3.5 bg-rose-50 text-rose-900 border border-rose-100 text-xs rounded-xl flex items-center gap-2 select-none">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-100">
+                  <X className="w-3 h-3 text-rose-600" />
+                </span>
+                <span>{enquiryActionError}</span>
+              </div>
+            )}
+
+            {/* Filter and search bar */}
+            <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-xs flex flex-col md:flex-row gap-4 items-center justify-between">
+              {/* Category selector pills */}
+              <div className="flex gap-2 w-full md:w-auto">
+                {(['All', 'Pending', 'Resolved'] as const).map((filter) => {
+                  const count = filter === 'All' ? totalEnquiriesCount : filter === 'Pending' ? pendingEnquiriesCount : resolvedEnquiriesCount;
+                  return (
+                    <button
+                      key={filter}
+                      onClick={() => setEnquiryFilter(filter)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        enquiryFilter === filter
+                          ? 'bg-red-950 text-white shadow-xs'
+                          : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100 border border-neutral-200/50'
+                      }`}
+                    >
+                      {filter} <span className={`text-[10px] font-mono font-semibold px-1 rounded-sm ${enquiryFilter === filter ? 'bg-orange-600 text-white' : 'bg-neutral-200 text-neutral-600'}`}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Search input field */}
+              <div className="w-full md:max-w-md relative shrink-0">
+                <input
+                  type="text"
+                  placeholder="Search by customer name, email, subject, message content..."
+                  value={enquirySearchQuery}
+                  onChange={(e) => setEnquirySearchQuery(e.target.value)}
+                  className="w-full text-xs bg-neutral-50 border border-neutral-200 rounded-xl py-2.5 pl-3 pr-10 focus:outline-none focus:ring-1 focus:ring-orange-500 hover:border-neutral-300 transition"
+                />
+                {enquirySearchQuery && (
+                  <button onClick={() => setEnquirySearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 cursor-pointer">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* List entries */}
+            <div className="space-y-4">
+              {filteredEnquiries.length === 0 ? (
+                <div className="bg-white p-12 text-center rounded-2xl border border-dashed border-neutral-300 flex flex-col items-center justify-center space-y-2">
+                  <MessageSquareCode className="w-10 h-10 text-neutral-300" />
+                  <p className="text-sm font-bold text-neutral-600">No support enquiries found</p>
+                  <p className="text-xs text-neutral-400">Try modifying your query terms or selection categories.</p>
+                </div>
+              ) : (
+                filteredEnquiries.map((enq) => {
+                  const draftText = enquiryDraftText[enq.id] || '';
+                  const drafting = isEnquiryDrafting[enq.id] || false;
+                  const submitting = isEnquirySubmitting[enq.id] || false;
+
+                  return (
+                    <div key={enq.id} className="bg-white rounded-2xl border border-neutral-200/80 shadow-xs overflow-hidden transition hover:border-neutral-300">
+                      
+                      {/* Top banner */}
+                      <div className="p-5 border-b border-neutral-100 flex flex-col sm:flex-row justify-between items-start gap-4">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-mono bg-neutral-100 text-neutral-600 border px-1.5 py-0.5 rounded-md font-bold">
+                              {enq.id}
+                            </span>
+                            <span className="text-xs font-serif font-extrabold text-neutral-800">
+                              {enq.subject}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              enq.status === 'Pending' 
+                                ? 'bg-rose-50 text-rose-700 border-rose-100'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                            }`}>
+                              {enq.status}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-neutral-500 font-sans flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-bold text-neutral-700">{enq.name}</span>
+                            {enq.email && (
+                              <>
+                                <span>•</span>
+                                <span className="underline hover:text-orange-600 transition">{enq.email}</span>
+                              </>
+                            )}
+                            <span>•</span>
+                            <span className="font-mono text-[10px]">{new Date(enq.createdAt).toLocaleString('en-IN')}</span>
+                          </div>
+                        </div>
+
+                        {/* Action corner */}
+                        <div className="flex gap-2 self-stretch sm:self-auto justify-end">
+                          <button
+                            onClick={() => handleDeleteEnquiry(enq.id)}
+                            className="p-2 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-100/50 hover:border-rose-200 transition cursor-pointer"
+                            title="Delete Enquiry"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Msg bubble and replies */}
+                      <div className="p-5 bg-neutral-50/50 space-y-4">
+                        <div className="bg-white p-4 rounded-xl border border-neutral-100 shadow-3xs leading-relaxed text-xs text-neutral-700 font-sans">
+                          {enq.message}
+                        </div>
+
+                        {/* Resolved Reply Area */}
+                        {enq.status === 'Resolved' && enq.replyText && (
+                          <div className="p-4 bg-emerald-50/30 text-emerald-900 border border-emerald-100/40 rounded-xl flex items-start gap-3">
+                            <div className="p-1 rounded-full bg-emerald-100 text-emerald-800 shrink-0 mt-0.5">
+                              <Check className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-800">Owner Response reply registered:</p>
+                              <p className="text-xs font-sans whitespace-pre-line leading-relaxed">{enq.replyText}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Pending Reply Form */}
+                        {enq.status === 'Pending' && (
+                          <div className="p-4 bg-orange-50/20 border border-orange-100/30 rounded-xl space-y-3">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 block">Response Formulation:</label>
+                              <button
+                                onClick={() => handleGenerateEnquiryReply(enq)}
+                                disabled={drafting}
+                                className="text-[10px] font-sans font-bold text-orange-700 hover:text-white hover:bg-orange-600 px-2 py-1 rounded border border-orange-200 hover:border-orange-600 bg-orange-50/50 transition cursor-pointer flex items-center gap-1 shrink-0"
+                              >
+                                {drafting ? (
+                                  <>
+                                    <RefreshCw className="w-3 h-3 animate-spin" /> Drafting suggestions...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Sparkles className="w-3 h-3 text-orange-600" /> Draft Response via AI
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            <textarea
+                              rows={3}
+                              placeholder="Type response or click 'Draft Response' above to draft with Gemini..."
+                              value={draftText}
+                              onChange={(e) => setEnquiryDraftText(prev => ({ ...prev, [enq.id]: e.target.value }))}
+                              className="w-full p-2.5 text-xs bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-orange-500 resize-none font-sans"
+                            />
+
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              <button
+                                onClick={() => handleMarkAsResolvedDirectly(enq.id)}
+                                disabled={submitting}
+                                className="px-3 py-1.5 text-[10px] font-bold text-neutral-600 hover:bg-neutral-100 border rounded-lg transition shrink-0 cursor-pointer"
+                              >
+                                Mark Solved Direct (No Reply)
+                              </button>
+                              <button
+                                onClick={() => handlePublishEnquiryReply(enq.id)}
+                                disabled={submitting || !draftText.trim()}
+                                className="px-4 py-1.5 text-[10px] bg-red-950 hover:bg-orange-600 text-white rounded-lg font-bold transition shrink-0 cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                              >
+                                {submitting ? (
+                                  <>
+                                    <RefreshCw className="w-3 h-3 animate-spin" /> Transmitting...
+                                  </>
+                                ) : (
+                                  "Transmit Resolution Reply"
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
           </div>
         )}
 

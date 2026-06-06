@@ -4,7 +4,7 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
-import { MenuItem, Order, Review, Coupon, CustomConfig, SubscriptionPlan, PaymentSettings } from './src/types';
+import { MenuItem, Order, Review, Coupon, CustomConfig, SubscriptionPlan, PaymentSettings, Enquiry } from './src/types';
 
 // Load environment variables
 dotenv.config();
@@ -335,6 +335,37 @@ const DEFAULT_ORDERS: Order[] = [
   }
 ];
 
+const DEFAULT_ENQUIRIES: Enquiry[] = [
+  {
+    id: "enq-1",
+    name: "Ramesh Patil",
+    email: "ramesh.patil@outlook.com",
+    subject: "Custom Spice Adjustments for Kids & Seniors",
+    message: "Namaste, we want to subscribe to your 6 days monthly lunch tiffins. Do you provide a mild spicy option for kids and seniors? And clean cooking with double filtered sesame/groundnut oil?",
+    status: "Pending",
+    createdAt: "2026-06-05T09:15:00Z"
+  },
+  {
+    id: "enq-2",
+    name: "Priya Joshi",
+    email: "priya.joshi@gmail.com",
+    subject: "Sunday Tiffin Delivery Rules in Pune",
+    message: "Hello team, do you deliver monthly tiffin plans on Sundays? I am living in Kothrud and love your authentic homestyle bhakri and dal!",
+    status: "Resolved",
+    replyText: "Namaste Priya! Thank you so much for the love. Currently, our core standard monthly subscriptions are operating 6 days a week (Monday to Saturday). However, for Sundays, you can order directly from our custom dynamic menu card here on the website which has all special menu options active! Hope this supports you.",
+    createdAt: "2026-06-04T11:40:00Z"
+  },
+  {
+    id: "enq-3",
+    name: "Sunil Kadam",
+    email: "kadam.sunil@yahoo.com",
+    subject: "Mini Catering Service for Pune Housewarming Event",
+    message: "Hello Bhagwati Cloud Kitchen, I want to book a dinner catering order for 25 people for our housewarming function near NIBM road on June 15th. Is it possible to get customized dry bhaji and sweet puran poli?",
+    status: "Pending",
+    createdAt: "2026-06-05T14:22:00Z"
+  }
+];
+
 // Shared in-memory DB cache to prevent file read conflicts and accidental resets
 let cachedDB: any = null;
 
@@ -365,7 +396,8 @@ function loadDB() {
         menu: DEFAULT_MENU,
         reviews: DEFAULT_REVIEWS,
         coupons: DEFAULT_COUPONS,
-        orders: DEFAULT_ORDERS
+        orders: DEFAULT_ORDERS,
+        enquiries: DEFAULT_ENQUIRIES
       };
       saveDB(data);
       return data;
@@ -382,8 +414,16 @@ function loadDB() {
 
     const db = JSON.parse(content);
     if (db && db.config) {
+      let changed = false;
       if (!db.config.paymentSettings) {
         db.config.paymentSettings = DEFAULT_PAYMENT_SETTINGS;
+        changed = true;
+      }
+      if (!db.enquiries) {
+        db.enquiries = DEFAULT_ENQUIRIES;
+        changed = true;
+      }
+      if (changed) {
         saveDB(db);
       }
       cachedDB = db; // Update cache
@@ -408,7 +448,8 @@ function loadDB() {
       menu: DEFAULT_MENU,
       reviews: DEFAULT_REVIEWS,
       coupons: DEFAULT_COUPONS,
-      orders: DEFAULT_ORDERS
+      orders: DEFAULT_ORDERS,
+      enquiries: DEFAULT_ENQUIRIES
     };
     saveDB(data);
     return data;
@@ -553,6 +594,91 @@ app.delete('/api/reviews/:id', (req, res) => {
   db.reviews = db.reviews.filter((rev: Review) => rev.id !== req.params.id);
   saveDB(db);
   res.json({ message: "Review deleted successfully", reviews: db.reviews });
+});
+
+// Submit a customer enquiry
+app.post('/api/enquiries', (req, res) => {
+  const db = loadDB();
+  const { name, email, subject, message } = req.body;
+  if (!name || !subject || !message) {
+    return res.status(400).json({ error: "Name, subject and message are required" });
+  }
+
+  const newEnquiry: Enquiry = {
+    id: 'enq-' + (db.enquiries ? db.enquiries.length + 1 : 1) + '-' + Math.floor(Math.random() * 1000),
+    name,
+    email: email || '',
+    subject,
+    message,
+    status: 'Pending',
+    createdAt: new Date().toISOString()
+  };
+
+  if (!db.enquiries) {
+    db.enquiries = [];
+  }
+  db.enquiries.unshift(newEnquiry);
+  saveDB(db);
+  res.json({ message: "Thank you! Your enquiry was delivered successfully.", enquiry: newEnquiry, enquiries: db.enquiries });
+});
+
+// Update standard enquiry status or response replies
+app.put('/api/enquiries/:id', (req, res) => {
+  const db = loadDB();
+  if (!db.enquiries) db.enquiries = [];
+  const index = db.enquiries.findIndex((enq: Enquiry) => enq.id === req.params.id);
+  if (index !== -1) {
+    db.enquiries[index] = { ...db.enquiries[index], ...req.body };
+    saveDB(db);
+    return res.json({ message: "Enquiry updated successfully", enquiries: db.enquiries });
+  }
+  res.status(404).json({ error: "Enquiry not found" });
+});
+
+// Delete enquiry
+app.delete('/api/enquiries/:id', (req, res) => {
+  const db = loadDB();
+  if (!db.enquiries) db.enquiries = [];
+  db.enquiries = db.enquiries.filter((enq: Enquiry) => enq.id !== req.params.id);
+  saveDB(db);
+  res.json({ message: "Enquiry record successfully removed", enquiries: db.enquiries });
+});
+
+// AI suggested reply for enquiry
+app.post('/api/gemini/reply-enquiry', async (req, res) => {
+  const { name, message, subject } = req.body;
+  if (!name || !message) {
+    return res.status(400).json({ error: "Missing name or message" });
+  }
+
+  let generatedReply = "";
+  const ai = getGeminiClient();
+  if (ai) {
+    try {
+      const prompt = `Write a polite, warm, and highly professional Indian hospitality owner reply greeting to a customer support enquiry for Bhagwati Cloud Kitchen, Pune.
+      Customer Name: "${name}"
+      Query Subject: "${subject || 'General Enquiry'}"
+      Customer Message: "${message}"
+      Signature: Manager, Bhagwati Cloud Kitchen. Preserve traditional polite Indian hospitality greeting tone (e.g. Namaste / warm greeting). Provide a direct, helpful, and concise solution-oriented reply in 2-3 sentences.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+      });
+
+      if (response && response.text) {
+        generatedReply = response.text.trim();
+      }
+    } catch (error) {
+      console.error("Gemini enquiry auto draft failed:", error);
+    }
+  }
+
+  if (!generatedReply) {
+    generatedReply = `Namaste ${name}! Thank you for reaching out to Bhagwati Cloud Kitchen. We have received your query regarding "${subject || 'your enquiry'}" and are looking into it. Our team will contact you directly on phone to assist you further. - Bhagwati Cloud Kitchen Team`;
+  }
+
+  res.json({ replyText: generatedReply });
 });
 
 // Manage coupons

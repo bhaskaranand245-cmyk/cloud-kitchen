@@ -112,3 +112,14 @@ export interface UserAuthStore {
   name?: string;
   loyaltyPoints: number;
 }
+
+export interface Enquiry {
+  id: string;
+  name: string;
+  email?: string;
+  subject: string;
+  message: string;
+  status: 'Pending' | 'Resolved';
+  replyText?: string;
+  createdAt: string;
+}

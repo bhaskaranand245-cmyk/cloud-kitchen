@@ -46,18 +46,18 @@ interface SubscriberData {
 }
 
 const DEFAULT_SIMULATED_SUBSCRIBER: SubscriberData = {
-  subscriberName: "Ramesh Sharma",
-  mobile: "9960877739",
+  subscriberName: "",
+  mobile: "",
   activePlanName: "Regular Standard (6 Days/Week - Mon to Sat)",
   startDate: "2026-06-01",
   endDate: "2026-06-30",
   daysDelivered: 12,
   totalDays: 26,
   cashbackBalance: 300,
-  address: "Flat 202, Sunshine Heights, Near NIBM Road, Pune",
-  pincode: "411037",
+  address: "",
+  pincode: "",
   deliverySlot: "Splits [12:15 PM & 7:45 PM]",
-  gateNotes: "Leave food pack with society lobby guard if no one answers.",
+  gateNotes: "",
   spiceLevelValue: "Medium",
   schedule: {
     'Monday (Jun 8)': { status: 'active', dateLabel: 'Jun 8', dryVeg: 'Bhindi Masala', wetGravy: 'Dal Tadka', spice: 'Medium', slot: 'Lunch [12:00 PM - 2:00 PM]' },
