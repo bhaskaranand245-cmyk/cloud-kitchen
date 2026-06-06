@@ -3,6 +3,7 @@ import { MenuItem, Coupon, CustomConfig, Order } from '../types';
 import { ShoppingBag, X, Plus, Minus, Trash2, Ticket, Check, CreditCard, ShieldCheck, MessageCircle, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { checkIsKitchenClosed, formatTime12h } from '../utils/time';
+import PaymentModal from './PaymentModal';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -60,6 +61,15 @@ export default function CartDrawer({
   const [isWhatsAppShareEnabled, setIsWhatsAppShareEnabled] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Secure payment gateway modal states
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [pendingOrderDetails, setPendingOrderDetails] = useState<{
+    orderId: string;
+    totalAmount: number;
+    paymentMethodId: string;
+    paymentMethodName: string;
+  } | null>(null);
 
   const isCurfewActive = (config?.isCloseCurtainEnabled ?? true) && checkIsKitchenClosed(config?.openingTime, config?.closingTime);
 
@@ -179,68 +189,80 @@ export default function CartDrawer({
 
       const data = await res.json();
       if (res.ok) {
-        const finalPointsRemaining = loyaltyPoints - loyaltyDeduction;
-        const pointsEarnedNow = Math.floor((subtotal / 100) * config.loyaltyPointsPer100);
-        const nextPointsBalance = finalPointsRemaining + pointsEarnedNow;
-        localStorage.setItem('bhagwati_loyalty_points', nextPointsBalance.toString());
-        setLoyaltyPoints(nextPointsBalance);
-        setUseLoyalty(false);
+        // Evaluate if the checkout is COD or an online gateway that needs visual authorization
+        if (paymentMethod === 'cod') {
+          const finalPointsRemaining = loyaltyPoints - loyaltyDeduction;
+          const pointsEarnedNow = Math.floor((subtotal / 100) * config.loyaltyPointsPer100);
+          const nextPointsBalance = finalPointsRemaining + pointsEarnedNow;
+          localStorage.setItem('bhagwati_loyalty_points', nextPointsBalance.toString());
+          setLoyaltyPoints(nextPointsBalance);
+          setUseLoyalty(false);
 
-        // Save order ID to local history
-        try {
-          const stored = localStorage.getItem('bhagwati_order_ids');
-          const ids = stored ? JSON.parse(stored) : [];
-          if (Array.isArray(ids)) {
-            if (!ids.includes(data.orderId)) {
-              ids.push(data.orderId);
+          // Save order ID to local history
+          try {
+            const stored = localStorage.getItem('bhagwati_order_ids');
+            const ids = stored ? JSON.parse(stored) : [];
+            if (Array.isArray(ids)) {
+              if (!ids.includes(data.orderId)) {
+                ids.push(data.orderId);
+              }
+              localStorage.setItem('bhagwati_order_ids', JSON.stringify(ids));
+            } else {
+              localStorage.setItem('bhagwati_order_ids', JSON.stringify([data.orderId]));
             }
-            localStorage.setItem('bhagwati_order_ids', JSON.stringify(ids));
-          } else {
-            localStorage.setItem('bhagwati_order_ids', JSON.stringify([data.orderId]));
+          } catch (e) {
+            console.error("Local storage sync error:", e);
           }
-        } catch (e) {
-          console.error("Local storage sync error:", e);
-        }
 
-        onClearCart();
-        onOrderPlaced(data.orderId);
-        onClose();
+          onClearCart();
+          onOrderPlaced(data.orderId);
+          onClose();
 
-        if (isWhatsAppShareEnabled) {
-          const subtotalText = selectedItems.reduce((acc, curr) => acc + (curr.item.price * curr.quantity), 0);
-          const lineDetails = selectedItems.map(c => `• ${c.quantity}x ${c.item.name} (₹${c.item.price * c.quantity})`).join('\n');
-          const finalDiscount = activeCoupon ? (activeCoupon.discountType === 'percentage' ? Math.round((subtotalText * activeCoupon.discountValue) / 100) : activeCoupon.discountValue) : 0;
-          const taxable = Math.max(0, subtotalText - finalDiscount);
-          const finalGst = parseFloat(((taxable * config.gstPercent) / 100).toFixed(2));
-          const finalDelivery = subtotalText > 0 ? config.deliveryCharge : 0;
-          const finalTotal = parseFloat((taxable + finalGst + finalDelivery + paymentAdjustment - loyaltyDeduction).toFixed(2));
+          if (isWhatsAppShareEnabled) {
+            const subtotalText = selectedItems.reduce((acc, curr) => acc + (curr.item.price * curr.quantity), 0);
+            const lineDetails = selectedItems.map(c => `• ${c.quantity}x ${c.item.name} (₹${c.item.price * c.quantity})`).join('\n');
+            const finalDiscount = activeCoupon ? (activeCoupon.discountType === 'percentage' ? Math.round((subtotalText * activeCoupon.discountValue) / 100) : activeCoupon.discountValue) : 0;
+            const taxable = Math.max(0, subtotalText - finalDiscount);
+            const finalGst = parseFloat(((taxable * config.gstPercent) / 100).toFixed(2));
+            const finalDelivery = subtotalText > 0 ? config.deliveryCharge : 0;
+            const finalTotal = parseFloat((taxable + finalGst + finalDelivery + paymentAdjustment - loyaltyDeduction).toFixed(2));
 
-          const text = `*New Order from Bhagwati Cloud Kitchen!* 🍛\n` +
-            `---------------------------------------\n` +
-            `*Order ID:* ${data.orderId}\n` +
-            `*Customer Name:* ${customerName}\n` +
-            `*Mobile:* +91 ${customerMobile}\n` +
-            `*Delivery Address:* ${deliveryAddress}\n` +
-            `*Pincode:* ${pincode}\n` +
-            `*Preferred Time Slot:* ${deliverySlot}\n\n` +
-            `*🛒 Items Shortlist:*\n${lineDetails}\n\n` +
-            `*💰 Bill Details:*\n` +
-            `• Subtotal: ₹${subtotalText}\n` +
-            `${finalDiscount > 0 ? `• Coupon Discount: -₹${finalDiscount}\n` : ''}` +
-            `• GST (${config.gstPercent}%): ₹${finalGst}\n` +
-            `• Packaging & Delivery: ₹${finalDelivery}\n` +
-            `${loyaltyDeduction > 0 ? `• Loyalty Wallet Savings: -₹${loyaltyDeduction}\n` : ''}` +
-            `• Gateway Adjustment: ₹${paymentAdjustment}\n` +
-            `---------------------------------------\n` +
-            `*Grand Total Bill:* ₹${finalTotal}\n` +
-            `*Payment Method:* ${paymentMethod}\n` +
-            `${notes ? `*Kitchen Notes:* ${notes}\n` : ''}` +
-            `*Loyalty Points Earned:* +${pointsEarnedNow} pts\n` +
-            `---------------------------------------\n` +
-            `Please confirm my order and share food preparation timings. Thank you! 🍽️`;
+            const text = `*New Order from Bhagwati Cloud Kitchen!* 🍛\n` +
+              `---------------------------------------\n` +
+              `*Order ID:* ${data.orderId}\n` +
+              `*Customer Name:* ${customerName}\n` +
+              `*Mobile:* +91 ${customerMobile}\n` +
+              `*Delivery Address:* ${deliveryAddress}\n` +
+              `*Pincode:* ${pincode}\n` +
+              `*Preferred Time Slot:* ${deliverySlot}\n\n` +
+              `*🛒 Items Shortlist:*\n${lineDetails}\n\n` +
+              `*💰 Bill Details:*\n` +
+              `• Subtotal: ₹${subtotalText}\n` +
+              `${finalDiscount > 0 ? `• Coupon Discount: -₹${finalDiscount}\n` : ''}` +
+              `• GST (${config.gstPercent}%): ₹${finalGst}\n` +
+              `• Packaging & Delivery: ₹${finalDelivery}\n` +
+              `${loyaltyDeduction > 0 ? `• Loyalty Wallet Savings: -₹${loyaltyDeduction}\n` : ''}` +
+              `• Gateway Adjustment: ₹${paymentAdjustment}\n` +
+              `---------------------------------------\n` +
+              `*Grand Total Bill:* ₹${finalTotal}\n` +
+              `*Payment Method:* ${paymentMethod}\n` +
+              `${notes ? `*Kitchen Notes:* ${notes}\n` : ''}` +
+              `*Loyalty Points Earned:* +${pointsEarnedNow} pts\n` +
+              `---------------------------------------\n` +
+              `Please confirm my order and share food preparation timings. Thank you! 🍽️`;
 
-          const url = `https://wa.me/91${config.mobileNumber}?text=${encodeURIComponent(text)}`;
-          window.open(url, '_blank', 'noopener,noreferrer');
+            const url = `https://wa.me/91${config.mobileNumber}?text=${encodeURIComponent(text)}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }
+        } else {
+          // Trigger the high-fidelity secure checkout modal gateway!
+          setPendingOrderDetails({
+            orderId: data.orderId,
+            totalAmount: totalAmount,
+            paymentMethodId: paymentMethod,
+            paymentMethodName: paymentGateway?.name || 'Secure Online Credit Gateway'
+          });
+          setIsPaymentModalOpen(true);
         }
       } else {
         setErrorMsg(data.error || 'Server rejected checkout transaction. Verify your input parameters.');
@@ -714,6 +736,98 @@ export default function CartDrawer({
             </button>
           </div>
         )}
+
+        {/* Secure checkout sandbox gateway modal overlay */}
+        <PaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            setErrorMsg('Secure payment authorization was cancelled by the user. You may click checkout to retry.');
+            setIsSubmitting(false);
+          }}
+          orderId={pendingOrderDetails?.orderId || ''}
+          totalAmount={pendingOrderDetails?.totalAmount || 0}
+          paymentMethodId={pendingOrderDetails?.paymentMethodId || ''}
+          paymentMethodName={pendingOrderDetails?.paymentMethodName || ''}
+          customerName={customerName}
+          customerMobile={customerMobile}
+          onPaymentSuccess={(updatedOrder) => {
+            setIsPaymentModalOpen(false);
+            setIsSubmitting(false);
+
+            // Add client side rewards balance
+            const finalPointsRemaining = loyaltyPoints - loyaltyDeduction;
+            const pointsEarnedNow = Math.floor((subtotal / 100) * config.loyaltyPointsPer100);
+            const nextPointsBalance = finalPointsRemaining + pointsEarnedNow;
+            localStorage.setItem('bhagwati_loyalty_points', nextPointsBalance.toString());
+            setLoyaltyPoints(nextPointsBalance);
+            setUseLoyalty(false);
+
+            // Sync order ID locally
+            try {
+              const stored = localStorage.getItem('bhagwati_order_ids');
+              const ids = stored ? JSON.parse(stored) : [];
+              if (Array.isArray(ids)) {
+                if (!ids.includes(updatedOrder.id)) {
+                  ids.push(updatedOrder.id);
+                }
+                localStorage.setItem('bhagwati_order_ids', JSON.stringify(ids));
+              } else {
+                localStorage.setItem('bhagwati_order_ids', JSON.stringify([updatedOrder.id]));
+              }
+            } catch (e) {
+              console.error("Local storage ID registration error:", e);
+            }
+
+            onClearCart();
+            onOrderPlaced(updatedOrder.id);
+            onClose();
+
+            // Fire official whatsapp statement
+            if (isWhatsAppShareEnabled) {
+              const subtotalText = selectedItems.reduce((acc, curr) => acc + (curr.item.price * curr.quantity), 0);
+              const lineDetails = selectedItems.map(c => `• ${c.quantity}x ${c.item.name} (₹${c.item.price * c.quantity})`).join('\n');
+              const finalDiscount = activeCoupon ? (activeCoupon.discountType === 'percentage' ? Math.round((subtotalText * activeCoupon.discountValue) / 100) : activeCoupon.discountValue) : 0;
+              const taxable = Math.max(0, subtotalText - finalDiscount);
+              const finalGst = parseFloat(((taxable * config.gstPercent) / 100).toFixed(2));
+              const finalDelivery = subtotalText > 0 ? config.deliveryCharge : 0;
+              const finalTotal = parseFloat((taxable + finalGst + finalDelivery + paymentAdjustment - loyaltyDeduction).toFixed(2));
+
+              const text = `*New Order from Bhagwati Cloud Kitchen!* 🍛\n` +
+                `---------------------------------------\n` +
+                `*Order ID:* ${updatedOrder.id}\n` +
+                `*Customer Name:* ${customerName}\n` +
+                `*Mobile:* +91 ${customerMobile}\n` +
+                `*Delivery Address:* ${deliveryAddress}\n` +
+                `*Pincode:* ${pincode}\n` +
+                `*Preferred Time Slot:* ${deliverySlot}\n\n` +
+                `*🛒 Items Shortlist:*\n${lineDetails}\n\n` +
+                `*💰 Bill Details:*\n` +
+                `• Subtotal: ₹${subtotalText}\n` +
+                `${finalDiscount > 0 ? `• Coupon Discount: -₹${finalDiscount}\n` : ''}` +
+                `• GST (${config.gstPercent}%): ₹${finalGst}\n` +
+                `• Packaging & Delivery: ₹${finalDelivery}\n` +
+                `${loyaltyDeduction > 0 ? `• Loyalty Wallet Savings: -₹${loyaltyDeduction}\n` : ''}` +
+                `• Gateway Adjustment: ₹${paymentAdjustment}\n` +
+                `---------------------------------------\n` +
+                `*Grand Total Bill:* ₹${finalTotal}\n` +
+                `*Payment Method:* ${pendingOrderDetails?.paymentMethodName || paymentMethod}\n` +
+                `*Payment Status:* Completed (Online Gateway Approved)\n` +
+                `${notes ? `*Kitchen Notes:* ${notes}\n` : ''}` +
+                `*Loyalty Points Earned:* +${pointsEarnedNow} pts\n` +
+                `---------------------------------------\n` +
+                `Kindly confirm my order and dispatch timings. Secure payment succeeded! Thank you! 🍽️`;
+
+              const url = `https://wa.me/91${config.mobileNumber}?text=${encodeURIComponent(text)}`;
+              window.open(url, '_blank', 'noopener,noreferrer');
+            }
+          }}
+          onPaymentFailure={(errorMsg) => {
+            setIsPaymentModalOpen(false);
+            setErrorMsg(`Secure Payment Declined: ${errorMsg}. Please try an alternative payment source or re-enter details.`);
+            setIsSubmitting(false);
+          }}
+        />
 
       </div>
     </div>

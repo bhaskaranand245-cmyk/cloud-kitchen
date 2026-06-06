@@ -258,7 +258,7 @@ export default function TiffinPlans({ onAddTiffinSubscription, brandPhone }: Tif
             FSSAI Sanitized Monthly Tiffin Plans
           </span>
           <h2 className="text-3xl sm:text-5xl font-serif font-black leading-tight tracking-tight text-neutral-100">
-            Pausable Monthly Tiffin Services in Pune
+            Pausable Monthly Tiffin Services in Ramnagar
           </h2>
           <p className="text-sm text-neutral-400 font-sans max-w-2xl mx-auto leading-relaxed">
             100% pure vegetarian home-cooked meals delivered in clinical airtight hot-packs. Perfect for corporate employees, students, and selective families seeking authentic taste with easy daily modifications.

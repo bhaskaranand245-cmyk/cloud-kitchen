@@ -4,7 +4,7 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
-import { MenuItem, Order, Review, Coupon, CustomConfig, SubscriptionPlan, PaymentSettings, Enquiry } from './src/types';
+import { MenuItem, Order, Review, Coupon, CustomConfig, SubscriptionPlan, PaymentSettings, Enquiry, Feedback } from './src/types';
 
 // Load environment variables
 dotenv.config();
@@ -68,7 +68,9 @@ const DEFAULT_CONFIG: CustomConfig = {
   closingTime: "22:00",
   openingTime: "08:00",
   isCloseCurtainEnabled: true,
-  closeCurtainMessage: "Our kitchen is currently resting (Hours: 10:00 PM to 8:00 AM). You can still browse our curated Pune thali menus, tiffin services, or pre-book slots for tomorrow's feast!"
+  closeCurtainMessage: "Our kitchen is currently resting (Hours: 10:00 PM to 8:00 AM). You can still browse our curated Pune thali menus, tiffin services, or pre-book slots for tomorrow's feast!",
+  updatedAt: 1717315180000,
+  menuUpdatedAt: 1717315180000
 };
 
 // Initial default menu
@@ -261,29 +263,81 @@ const DEFAULT_REVIEWS: Review[] = [
   {
     id: "r1",
     name: "Bhaskar Anand",
+    email: "bhaskar.anand24@gmail.com",
+    title: "Incredible Maharaja Thali",
     rating: 5,
     comment: "The Maharaja Thali is absolutely delicious! Very hygienic packaging, real homemade taste, and came smoking hot. The Paneer Butter Masala was rich and authentic. Highly recommended for daily tiffins!",
     date: "2026-05-30T10:00:00Z",
     isApproved: true,
+    status: 'Approved',
+    isVerified: true,
+    helpfulCount: 14,
+    reported: false,
     replyText: "Thank you Bhaskar! We use premium ingredients to maintain that home taste. Glad you loved our Maharaja Thali!"
   },
   {
     id: "r2",
     name: "Pooja Deshmukh",
+    email: "pooja.desh@outlook.com",
+    title: "Best Healthy Tiffin Service",
     rating: 5,
     comment: "Excellent monthly tiffin service. They maintain very low oil and spices so that it doesn't feel heavy even after eating daily. Timely delivery is a huge plus. The dal tadka tastes just like mom's cooking.",
     date: "2026-05-28T14:30:00Z",
     isApproved: true,
+    status: 'Approved',
+    isVerified: true,
+    helpfulCount: 22,
+    reported: false,
     replyText: "Thank pooja! Our kitchen is completely focused on health and hygiene for our daily subscription friends."
   },
   {
     id: "r3",
     name: "Ketan Kulkarni",
+    email: "ketan.kulkarni@gmail.com",
+    title: "Awesome Spicing & Fully Leak-Proof",
     rating: 4,
     comment: "Loved their Pav Bhaji and Kesar Lassi. The packaging of the pav bhaji was fully leak-proof. Price is highly affordable for the quality they provide.",
     date: "2026-06-01T12:15:00Z",
     isApproved: true,
+    status: 'Approved',
+    isVerified: true,
+    helpfulCount: 8,
+    reported: false,
     replyText: "Appreciate your kind review Ketan! Keep ordering your favorite meals."
+  }
+];
+
+const DEFAULT_FEEDBACKS: Feedback[] = [
+  {
+    id: "f1",
+    name: "Rohan Khanna",
+    email: "rohan.khanna@outlook.com",
+    category: "Suggestion",
+    priority: "Low",
+    message: "Could you please add more gluten-free bread options? Many of my office colleagues prefer bajari or jowar rotis for lunch.",
+    createdAt: "2026-06-03T11:45:00Z",
+    isAddressed: true,
+    notes: "Plan added to include Jowar Roti as an alternate thali option in July."
+  },
+  {
+    id: "f2",
+    name: "Meera Nair",
+    email: "meera.nair@gmail.com",
+    category: "Complaint",
+    priority: "High",
+    message: "The delivery on Wednesday was delayed by 25 minutes. Please ensure hot lunch tiffins reach by 1:00 PM as our lunch break is strict.",
+    createdAt: "2026-06-05T08:15:00Z",
+    isAddressed: false
+  },
+  {
+    id: "f3",
+    name: "Saurabh Joshi",
+    email: "saurabh.j@techcorp.com",
+    category: "Feature Request",
+    priority: "Medium",
+    message: "Would be amazing to have a WhatsApp notification when the dispatcher leaves the cloud kitchen with my daily tiffin box.",
+    createdAt: "2026-06-04T16:20:00Z",
+    isAddressed: false
   }
 ];
 
@@ -340,18 +394,46 @@ const DEFAULT_ENQUIRIES: Enquiry[] = [
     id: "enq-1",
     name: "Ramesh Patil",
     email: "ramesh.patil@outlook.com",
+    mobile: "9422018844",
+    category: "General Inquiry",
     subject: "Custom Spice Adjustments for Kids & Seniors",
     message: "Namaste, we want to subscribe to your 6 days monthly lunch tiffins. Do you provide a mild spicy option for kids and seniors? And clean cooking with double filtered sesame/groundnut oil?",
-    status: "Pending",
+    status: "Open",
+    priority: "High",
+    thread: [
+      {
+        id: "msg-1",
+        sender: "customer",
+        message: "Namaste, we want to subscribe to your 6 days monthly lunch tiffins. Do you provide a mild spicy option for kids and seniors? And clean cooking with double filtered sesame/groundnut oil?",
+        createdAt: "2026-06-05T09:15:00Z"
+      }
+    ],
     createdAt: "2026-06-05T09:15:00Z"
   },
   {
     id: "enq-2",
     name: "Priya Joshi",
     email: "priya.joshi@gmail.com",
+    mobile: "9820123456",
+    category: "Orders & Delivery",
     subject: "Sunday Tiffin Delivery Rules in Pune",
     message: "Hello team, do you deliver monthly tiffin plans on Sundays? I am living in Kothrud and love your authentic homestyle bhakri and dal!",
     status: "Resolved",
+    priority: "Medium",
+    thread: [
+      {
+        id: "msg-2a",
+        sender: "customer",
+        message: "Hello team, do you deliver monthly tiffin plans on Sundays? I am living in Kothrud and love your authentic homestyle bhakri and dal!",
+        createdAt: "2026-06-04T11:40:00Z"
+      },
+      {
+        id: "msg-2b",
+        sender: "agent",
+        message: "Namaste Priya! Thank you so much for the love. Currently, our core standard monthly subscriptions are operating 6 days a week (Monday to Saturday). However, for Sundays, you can order directly from our custom dynamic menu card here on the website which has all special menu options active! Hope this supports you.",
+        createdAt: "2026-06-04T12:05:00Z"
+      }
+    ],
     replyText: "Namaste Priya! Thank you so much for the love. Currently, our core standard monthly subscriptions are operating 6 days a week (Monday to Saturday). However, for Sundays, you can order directly from our custom dynamic menu card here on the website which has all special menu options active! Hope this supports you.",
     createdAt: "2026-06-04T11:40:00Z"
   },
@@ -359,9 +441,21 @@ const DEFAULT_ENQUIRIES: Enquiry[] = [
     id: "enq-3",
     name: "Sunil Kadam",
     email: "kadam.sunil@yahoo.com",
+    mobile: "9977221144",
+    category: "Feedback & Suggestions",
     subject: "Mini Catering Service for Pune Housewarming Event",
     message: "Hello Bhagwati Cloud Kitchen, I want to book a dinner catering order for 25 people for our housewarming function near NIBM road on June 15th. Is it possible to get customized dry bhaji and sweet puran poli?",
-    status: "Pending",
+    status: "In Progress",
+    priority: "Critical",
+    assignedAgent: "Executive Chef",
+    thread: [
+      {
+        id: "msg-3a",
+        sender: "customer",
+        message: "Hello Bhagwati Cloud Kitchen, I want to book a dinner catering order for 25 people for our housewarming function near NIBM road on June 15th. Is it possible to get customized dry bhaji and sweet puran poli?",
+        createdAt: "2026-06-05T14:22:00Z"
+      }
+    ],
     createdAt: "2026-06-05T14:22:00Z"
   }
 ];
@@ -397,7 +491,8 @@ function loadDB() {
         reviews: DEFAULT_REVIEWS,
         coupons: DEFAULT_COUPONS,
         orders: DEFAULT_ORDERS,
-        enquiries: DEFAULT_ENQUIRIES
+        enquiries: DEFAULT_ENQUIRIES,
+        feedbacks: DEFAULT_FEEDBACKS
       };
       saveDB(data);
       return data;
@@ -423,6 +518,46 @@ function loadDB() {
         db.enquiries = DEFAULT_ENQUIRIES;
         changed = true;
       }
+      if (!db.feedbacks) {
+        db.feedbacks = DEFAULT_FEEDBACKS;
+        changed = true;
+      }
+      
+      // Auto migrate older reviews in db to support title, verification status, status and helpfulCount
+      if (db.reviews && Array.isArray(db.reviews)) {
+        let reviewsMigrated = false;
+        db.reviews = db.reviews.map((rev: any) => {
+          let updated = false;
+          if (rev.isApproved && !rev.status) {
+            rev.status = 'Approved';
+            updated = true;
+          }
+          if (!rev.status) {
+            rev.status = 'Pending';
+            updated = true;
+          }
+          if (rev.helpfulCount === undefined) {
+            rev.helpfulCount = Math.floor(Math.random() * 5) + 1;
+            updated = true;
+          }
+          if (rev.isVerified === undefined) {
+            rev.isVerified = true;
+            updated = true;
+          }
+          if (!rev.title) {
+            rev.title = rev.rating >= 4 ? "Excellent Quality" : "Menu Review Comment";
+            updated = true;
+          }
+          if (updated) {
+            reviewsMigrated = true;
+          }
+          return rev;
+        });
+        if (reviewsMigrated) {
+          changed = true;
+        }
+      }
+
       if (changed) {
         saveDB(db);
       }
@@ -449,7 +584,8 @@ function loadDB() {
       reviews: DEFAULT_REVIEWS,
       coupons: DEFAULT_COUPONS,
       orders: DEFAULT_ORDERS,
-      enquiries: DEFAULT_ENQUIRIES
+      enquiries: DEFAULT_ENQUIRIES,
+      feedbacks: DEFAULT_FEEDBACKS
     };
     saveDB(data);
     return data;
@@ -467,7 +603,11 @@ app.get('/api/initial-state', (req, res) => {
 // Update standard settings configurations
 app.post('/api/config', (req, res) => {
   const db = loadDB();
-  db.config = { ...db.config, ...req.body };
+  db.config = { 
+    ...db.config, 
+    ...req.body,
+    updatedAt: req.body.updatedAt || Date.now()
+  };
   saveDB(db);
   res.json({ message: "Store settings updated successfully", config: db.config });
 });
@@ -480,8 +620,10 @@ app.post('/api/menu', (req, res) => {
     ...req.body
   };
   db.menu.push(newItem);
+  if (!db.config) db.config = { ...DEFAULT_CONFIG };
+  db.config.menuUpdatedAt = Date.now();
   saveDB(db);
-  res.json({ message: "Menu item created successfully", item: newItem, menu: db.menu });
+  res.json({ message: "Menu item created successfully", item: newItem, menu: db.menu, config: db.config });
 });
 
 // Update menu item
@@ -490,8 +632,10 @@ app.put('/api/menu/:id', (req, res) => {
   const index = db.menu.findIndex((item: MenuItem) => item.id === req.params.id);
   if (index !== -1) {
     db.menu[index] = { ...db.menu[index], ...req.body };
+    if (!db.config) db.config = { ...DEFAULT_CONFIG };
+    db.config.menuUpdatedAt = Date.now();
     saveDB(db);
-    return res.json({ message: "Menu item updated successfully", item: db.menu[index], menu: db.menu });
+    return res.json({ message: "Menu item updated successfully", item: db.menu[index], menu: db.menu, config: db.config });
   }
   res.status(404).json({ error: "Menu item not found" });
 });
@@ -500,8 +644,10 @@ app.put('/api/menu/:id', (req, res) => {
 app.delete('/api/menu/:id', (req, res) => {
   const db = loadDB();
   db.menu = db.menu.filter((item: MenuItem) => item.id !== req.params.id);
+  if (!db.config) db.config = { ...DEFAULT_CONFIG };
+  db.config.menuUpdatedAt = Date.now();
   saveDB(db);
-  res.json({ message: "Menu item removed successfully", menu: db.menu });
+  res.json({ message: "Menu item removed successfully", menu: db.menu, config: db.config });
 });
 
 // Reorder categories/items
@@ -512,18 +658,76 @@ app.post('/api/menu/reorder', (req, res) => {
   }
   const db = loadDB();
   db.menu = menu;
+  if (!db.config) db.config = { ...DEFAULT_CONFIG };
+  db.config.menuUpdatedAt = Date.now();
   saveDB(db);
-  res.json({ message: "Menu hierarchy rearranged successfully", menu: db.menu });
+  res.json({ message: "Menu hierarchy rearranged successfully", menu: db.menu, config: db.config });
 });
 
-// Manage reviews
+// Restore menu from client backup
+app.post('/api/menu/restore', (req, res) => {
+  const { menu, menuUpdatedAt } = req.body;
+  if (!Array.isArray(menu)) {
+    return res.status(400).json({ error: "Invalid payload: menu must be an array" });
+  }
+  const db = loadDB();
+  db.menu = menu;
+  if (!db.config) db.config = { ...DEFAULT_CONFIG };
+  db.config.menuUpdatedAt = menuUpdatedAt || Date.now();
+  saveDB(db);
+  res.json({ message: "Menu successfully synchronized from offline backup", menu: db.menu, config: db.config });
+});
+
+// Manage reviews with validation, spam protection, verification, and default statuses
 app.post('/api/reviews', async (req, res) => {
   const db = loadDB();
-  const { name, rating, comment } = req.body;
+  const { name, email, rating, title, comment } = req.body;
   
-  if (!name) {
+  if (!name || !name.trim()) {
     return res.status(400).json({ error: "Missing reviewer name" });
   }
+  if (!comment || !comment.trim()) {
+    return res.status(400).json({ error: "Missing review message content" });
+  }
+  if (!rating || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: "Invalid rating. Must be between 1 and 5" });
+  }
+
+  // Character validations
+  if (name.length > 50) return res.status(400).json({ error: "Name is too long (maximum 50 characters)" });
+  if (title && title.length > 100) return res.status(400).json({ error: "Title is too long (maximum 100 characters)" });
+  if (comment.length > 1000) return res.status(400).json({ error: "Review comment content is too long (maximum 1000 characters)" });
+
+  // Email format verification (if supplied)
+  const parsedEmail = (email || '').trim().toLowerCase();
+  if (parsedEmail && (!parsedEmail.includes('@') || !parsedEmail.includes('.'))) {
+    return res.status(400).json({ error: "Please enter a valid email address" });
+  }
+
+  // Spam protection & Blacklist filters
+  const blacklist = [
+    "casino", "viagra", "cryptocurrency", "bitcoin", "free cash", "earn money", 
+    "lottery", "make money online", "biorhythm", "pills", "meds", "win prize", "jackpot"
+  ];
+  const combinedText = `${title || ''} ${comment}`.toLowerCase();
+  if (blacklist.some(word => combinedText.includes(word))) {
+    return res.status(400).json({ error: "Your review contains terms flagged as spam. Please write an honest feedback about Bhagwati food!" });
+  }
+
+  // Duplicate checks against database
+  const isDuplicate = db.reviews.some((rev: Review) => 
+    rev.comment.trim().toLowerCase() === comment.trim().toLowerCase() &&
+    rev.name.trim().toLowerCase() === name.trim().toLowerCase()
+  );
+  if (isDuplicate) {
+    return res.status(400).json({ error: "A duplicate review content has already been published. Thank you!" });
+  }
+
+  // Verify Customer Credibility: Check if they are verified based on orders matching email or name!
+  const matchedOrder = db.orders.some((o: any) => 
+    (o.customerEmail && o.customerEmail.toLowerCase() === parsedEmail) ||
+    (o.customerName && o.customerName.toLowerCase() === name.trim().toLowerCase())
+  );
 
   let generatedReply = "";
   
@@ -531,11 +735,11 @@ app.post('/api/reviews', async (req, res) => {
   const ai = getGeminiClient();
   if (ai) {
     try {
-      const prompt = `Write a polite, warm, and personalized 1-to-2 sentence owner reply greeting to a customer review for Bhagwati Cloud Kitchen, Pune.
+      const prompt = `Write a polite, warm, and personalized 1-to-2 sentence owner reply greeting to a customer review for Bhagwati Cloud Kitchen, Ramnagar (formerly Pune/now Ramnagar).
       Customer Name: "${name}"
       Rating Given: ${rating} out of 5 stars
       Customer Review: "${comment || 'Loved the food!'}"
-      Signature: Bhagwati Cloud Kitchen Team. Preserve standard warm Indian greeting tone (e.g. Namaste / Thank you). Keep it direct, heartfelt, and human-sounding (avoid buzzwords, be humble). Mention how we appreciate their support for authentic homemade veg and tiffin services.`;
+      Signature: Bhagwati Cloud Kitchen Team. Preserve standard warm Indian greeting tone (e.g. Namaste / Thank you). Keep it direct, heartfelt, and human-sounding (avoid buzzwords, be humble). Mention how we appreciate their support for authentic homemade veg and tiffin services in Ramnagar.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
@@ -553,7 +757,7 @@ app.post('/api/reviews', async (req, res) => {
   // Fallback high-quality replies if Gemini is not configured or fails
   if (!generatedReply) {
     if (rating >= 4) {
-      generatedReply = `Namaste ${name}! Thank you so much for the wonderful ${rating}-star review. Our kitchen team is absolutely delighted to hear your kind words about our authentic homemade meals. We look forward to serving you again soon! - Bhagwati Cloud Kitchen Team`;
+      generatedReply = `Namaste ${name}! Thank you so much for the wonderful ${rating}-star review. Our kitchen team is absolutely delighted to hear your kind words about our authentic homemade meals. We look forward to serving you again in Ramnagar! - Bhagwati Cloud Kitchen Team`;
     } else if (rating === 3) {
       generatedReply = `Namaste ${name}. Thank you for your feedback. We appreciate your review and will double our efforts to improve our service and flavor profile to give you a 5-star experience next time! - Bhagwati Cloud Kitchen Team`;
     } else {
@@ -563,17 +767,54 @@ app.post('/api/reviews', async (req, res) => {
 
   const newReview: Review = {
     id: 'r' + (db.reviews.length + 1) + '-' + Math.floor(Math.random() * 1000),
-    isApproved: true, 
+    isApproved: false, // Moderated default: needs admin approval to go visible in frontend
+    status: 'Pending',
     date: new Date().toISOString(),
-    name,
+    name: name.trim(),
+    email: parsedEmail || undefined,
     rating,
-    comment,
-    replyText: generatedReply
+    title: (title || '').trim() || (rating >= 4 ? "Outstanding Veg Thali Deluxe" : "Healthy Tiffin Feedback"),
+    comment: comment.trim(),
+    replyText: generatedReply,
+    isVerified: matchedOrder,
+    helpfulCount: 0,
+    reported: false
   };
 
   db.reviews.unshift(newReview);
   saveDB(db);
-  res.json({ message: "Review posted successfully", review: newReview, reviews: db.reviews });
+  res.json({ 
+    message: "Thank you! Your verified review has been submitted to the kitchen manager and is pending quick moderation.", 
+    review: newReview, 
+    reviews: db.reviews 
+  });
+});
+
+// Upvote helpfulness of review
+app.post('/api/reviews/:id/helpful', (req, res) => {
+  const db = loadDB();
+  const index = db.reviews.findIndex((rev: Review) => rev.id === req.params.id);
+  if (index !== -1) {
+    db.reviews[index].helpfulCount = (db.reviews[index].helpfulCount || 0) + 1;
+    saveDB(db);
+    return res.json({ message: "Marked as helpful!", reviews: db.reviews });
+  }
+  res.status(404).json({ error: "Review not found" });
+});
+
+// Report a review for review moderation
+app.post('/api/reviews/:id/report', (req, res) => {
+  const db = loadDB();
+  const { reason } = req.body;
+  const index = db.reviews.findIndex((rev: Review) => rev.id === req.params.id);
+  if (index !== -1) {
+    db.reviews[index].reported = true;
+    db.reviews[index].reportReason = (reason || '').trim() || "Reported as spam/inappropriate content";
+    db.reviews[index].status = 'Flagged'; // Flip status to Flagged automatically
+    saveDB(db);
+    return res.json({ message: "Thank you. Review reported and flagged for active administrator screening.", reviews: db.reviews });
+  }
+  res.status(404).json({ error: "Review not found" });
 });
 
 // Admin reply/approve review
@@ -583,7 +824,7 @@ app.put('/api/reviews/:id', (req, res) => {
   if (index !== -1) {
     db.reviews[index] = { ...db.reviews[index], ...req.body };
     saveDB(db);
-    return res.json({ message: "Review status updated successfully", reviews: db.reviews });
+    return res.json({ message: "Review audit updated successfully", reviews: db.reviews });
   }
   res.status(404).json({ error: "Review not found" });
 });
@@ -596,21 +837,89 @@ app.delete('/api/reviews/:id', (req, res) => {
   res.json({ message: "Review deleted successfully", reviews: db.reviews });
 });
 
+// CUSTOMER FEEDBACK APIS
+app.post('/api/feedback', (req, res) => {
+  const db = loadDB();
+  const { name, email, category, priority, message } = req.body;
+  
+  if (!name || !name.trim()) return res.status(400).json({ error: "Please enter your name" });
+  if (!email || !email.trim()) return res.status(400).json({ error: "Please enter your email address" });
+  if (!message || !message.trim()) return res.status(400).json({ error: "Please write your feedback comment" });
+
+  const blacklist = ["casino", "viagra", "crypto", "bitcoin", "lottery", "unsolicited ad"];
+  const contentLower = message.toLowerCase();
+  if (blacklist.some(word => contentLower.includes(word))) {
+    return res.status(400).json({ error: "Your message content triggered our automated spam detector filter." });
+  }
+
+  const newFeedback: Feedback = {
+    id: 'f' + (db.feedbacks ? db.feedbacks.length + 1 : 1) + '-' + Math.floor(Math.random() * 1000),
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    category: category || 'General Feedback',
+    priority: priority || 'Medium',
+    message: message.trim(),
+    createdAt: new Date().toISOString(),
+    isAddressed: false
+  };
+
+  if (!db.feedbacks) db.feedbacks = [];
+  db.feedbacks.unshift(newFeedback);
+  saveDB(db);
+  res.json({ message: "Namaste! Feedback successfully logged for kitchen staff analysis.", feedbacks: db.feedbacks });
+});
+
+app.put('/api/feedback/:id', (req, res) => {
+  const db = loadDB();
+  if (!db.feedbacks) db.feedbacks = [];
+  const index = db.feedbacks.findIndex((feed: Feedback) => feed.id === req.params.id);
+  if (index !== -1) {
+    db.feedbacks[index] = { ...db.feedbacks[index], ...req.body };
+    saveDB(db);
+    return res.json({ message: "Feedback ticket status revised", feedbacks: db.feedbacks });
+  }
+  res.status(404).json({ error: "Feedback reference not found" });
+});
+
+app.delete('/api/feedback/:id', (req, res) => {
+  const db = loadDB();
+  if (!db.feedbacks) db.feedbacks = [];
+  db.feedbacks = db.feedbacks.filter((feed: Feedback) => feed.id !== req.params.id);
+  saveDB(db);
+  res.json({ message: "Feedback log deleted successfully", feedbacks: db.feedbacks });
+});
+
 // Submit a customer enquiry
 app.post('/api/enquiries', (req, res) => {
   const db = loadDB();
-  const { name, email, subject, message } = req.body;
+  const { name, email, mobile, category, subject, message, priority, attachments, thread } = req.body;
   if (!name || !subject || !message) {
     return res.status(400).json({ error: "Name, subject and message are required" });
   }
 
+  const generatedId = 'enq-' + (db.enquiries ? db.enquiries.length + 1 : 1) + '-' + Math.floor(Math.random() * 1000);
+  
+  const initialThread = thread || [
+    {
+      id: `msg-initial-${Date.now()}`,
+      sender: 'customer',
+      message: message.trim(),
+      createdAt: new Date().toISOString()
+    }
+  ];
+
   const newEnquiry: Enquiry = {
-    id: 'enq-' + (db.enquiries ? db.enquiries.length + 1 : 1) + '-' + Math.floor(Math.random() * 1000),
+    id: generatedId,
     name,
     email: email || '',
+    mobile: mobile || '',
+    category: category || 'General Inquiry',
     subject,
     message,
-    status: 'Pending',
+    status: req.body.status || 'Open',
+    priority: priority || 'Medium',
+    attachments: attachments || [],
+    thread: initialThread,
     createdAt: new Date().toISOString()
   };
 
@@ -767,7 +1076,7 @@ app.post('/api/orders', (req, res) => {
     deliveryCharge,
     totalAmount,
     paymentMethod,
-    paymentStatus: paymentMethod === 'COD' ? 'Pending' : 'Completed', // Simulator
+    paymentStatus: (paymentMethod && paymentMethod.toLowerCase() === 'cod') ? 'Pending' : 'Pending', // Starts as Pending until secure gateway verifies it or rider completes COD
     orderStatus: 'Placed',
     createdAt: new Date().toISOString(),
     notes,

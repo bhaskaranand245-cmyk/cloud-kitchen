@@ -41,8 +41,103 @@ export default function App() {
       const res = await fetch('/api/initial-state');
       if (res.ok) {
         const data = await res.json();
-        setConfig(data.config);
-        setMenu(data.menu);
+        
+        // Retrieve hybrid client-side backup of config to persist settings across container idle sleep or build restarts
+        const localBackup = localStorage.getItem('bhagwati_custom_config');
+        let finalConfig = data.config;
+        
+        if (localBackup) {
+          try {
+            const parsedBackup = JSON.parse(localBackup);
+            if (parsedBackup && typeof parsedBackup === 'object' && parsedBackup.brandName) {
+              const serverUpdatedAt = data.config.updatedAt || 1717315180000;
+              const backupUpdatedAt = parsedBackup.updatedAt || 1717315180000;
+              
+              // If the local backup is newer than the server configuration, restore it on server
+              if (backupUpdatedAt > serverUpdatedAt) {
+                console.log(`Local backup is newer (${backupUpdatedAt} > ${serverUpdatedAt}). Restoring settings on server...`);
+                const restoreRes = await fetch('/api/config', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(parsedBackup)
+                });
+                if (restoreRes.ok) {
+                  const restoredData = await restoreRes.json();
+                  finalConfig = restoredData.config;
+                  console.log("Successfully restored custom configuration backup to ephemeral database server.");
+                } else {
+                  finalConfig = parsedBackup;
+                }
+              } else {
+                // Server has up-to-date config, keep it and update our local storage
+                console.log(`Server configuration is current (${serverUpdatedAt} >= ${backupUpdatedAt}). Syncing local storage cache.`);
+                localStorage.setItem('bhagwati_custom_config', JSON.stringify(data.config));
+                finalConfig = data.config;
+              }
+            }
+          } catch (e) {
+            console.error("Failed to safely load local config backup:", e);
+          }
+        } else {
+          // No local backup exists, initialize it with current server config
+          localStorage.setItem('bhagwati_custom_config', JSON.stringify(data.config));
+        }
+
+        // Retrieve hybrid client-side backup of menu recipes list
+        const localMenuBackup = localStorage.getItem('bhagwati_custom_menu');
+        let finalMenu = data.menu;
+
+        if (localMenuBackup) {
+          try {
+            const parsedMenuBackup = JSON.parse(localMenuBackup);
+            if (parsedMenuBackup && typeof parsedMenuBackup === 'object' && Array.isArray(parsedMenuBackup.menu)) {
+              const serverMenuUpdatedAt = finalConfig.menuUpdatedAt || 1717315180000;
+              const backupMenuUpdatedAt = parsedMenuBackup.menuUpdatedAt || 1717315180000;
+
+              // If the local menu backup is newer than the server configuration, restore it on server
+              if (backupMenuUpdatedAt > serverMenuUpdatedAt) {
+                console.log(`Local menu backup is newer (${backupMenuUpdatedAt} > ${serverMenuUpdatedAt}). Restoring custom recipes on server...`);
+                const restoreMenuRes = await fetch('/api/menu/restore', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    menu: parsedMenuBackup.menu,
+                    menuUpdatedAt: backupMenuUpdatedAt
+                  })
+                });
+                if (restoreMenuRes.ok) {
+                  const restoredMenuData = await restoreMenuRes.json();
+                  finalMenu = restoredMenuData.menu;
+                  if (restoredMenuData.config) {
+                    finalConfig = restoredMenuData.config;
+                    localStorage.setItem('bhagwati_custom_config', JSON.stringify(restoredMenuData.config));
+                  }
+                  console.log("Successfully restored custom culinary offerings backup to ephemeral database server.");
+                } else {
+                  finalMenu = parsedMenuBackup.menu;
+                }
+              } else {
+                // Server has current menu, synchronize the local storage backup
+                console.log(`Server recipe menu is current (${serverMenuUpdatedAt} >= ${backupMenuUpdatedAt}). Syncing local storage cache.`);
+                localStorage.setItem('bhagwati_custom_menu', JSON.stringify({
+                  menu: data.menu,
+                  menuUpdatedAt: serverMenuUpdatedAt
+                }));
+              }
+            }
+          } catch (e) {
+            console.error("Failed to safely load local menu backup:", e);
+          }
+        } else {
+          // No local menu backup exists, initialize it with current server config
+          localStorage.setItem('bhagwati_custom_menu', JSON.stringify({
+            menu: data.menu,
+            menuUpdatedAt: finalConfig.menuUpdatedAt || 1717315180000
+          }));
+        }
+        
+        setConfig(finalConfig);
+        setMenu(finalMenu);
         setReviews(data.reviews);
         setCoupons(data.coupons);
         setOrders(data.orders);
@@ -53,6 +148,67 @@ export default function App() {
     } finally {
       setAppIsLoading(false);
     }
+  };
+
+  // Synchronized callback for menu list updates to protect against container restarts
+  const handleUpdateMenu = async (updatedMenu: MenuItem[]) => {
+    setMenu(updatedMenu);
+    const now = Date.now();
+    
+    // Persist in local storage immediately for fail-safe resilience
+    localStorage.setItem('bhagwati_custom_menu', JSON.stringify({
+      menu: updatedMenu,
+      menuUpdatedAt: now
+    }));
+    
+    let updatedConfig = config;
+    if (config) {
+      updatedConfig = {
+        ...config,
+        menuUpdatedAt: now,
+        updatedAt: Date.now() // Raise updatedAt so this config is always considered newer on load
+      };
+      setConfig(updatedConfig);
+      localStorage.setItem('bhagwati_custom_config', JSON.stringify(updatedConfig));
+    }
+
+    try {
+      // Trigger a persistent API update on the server to prevent data loss
+      const res = await fetch('/api/menu/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          menu: updatedMenu,
+          menuUpdatedAt: now
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        console.log("Successfully synchronized menu changes with database on the server.");
+        if (data.config) {
+          // Sync client-side config state with backend state
+          const mergedConfig = {
+            ...(updatedConfig || {}),
+            ...data.config,
+            menuUpdatedAt: now,
+            updatedAt: data.config.updatedAt || Date.now()
+          };
+          setConfig(mergedConfig);
+          localStorage.setItem('bhagwati_custom_config', JSON.stringify(mergedConfig));
+        }
+      } else {
+        console.error("Failed to synchronize menu changes to the server: status", res.status);
+      }
+    } catch (err) {
+      console.error("Failed to persistently synchronize menu updates to backend server:", err);
+    }
+  };
+
+  // Synchronized callback for local storage backup configuration
+  const handleUpdateConfig = (updatedConfig: CustomConfig) => {
+    setConfig(updatedConfig);
+    localStorage.setItem('bhagwati_custom_config', JSON.stringify(updatedConfig));
   };
 
   useEffect(() => {
@@ -149,17 +305,18 @@ export default function App() {
     setIsCartOpen(true);
   };
 
-  const handleReviewSubmission = async (name: string, rating: number, comment: string) => {
+  const handleReviewSubmission = async (name: string, rating: number, comment: string, email?: string, title?: string) => {
     const res = await fetch('/api/reviews', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, rating, comment })
+      body: JSON.stringify({ name, rating, comment, email, title })
     });
     if (res.ok) {
       const data = await res.json();
       setReviews(data.reviews);
     } else {
-      throw new Error();
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to submit review');
     }
   };
 
@@ -341,8 +498,8 @@ export default function App() {
                 coupons={coupons}
                 config={config}
                 enquiries={enquiries}
-                onUpdateMenu={setMenu}
-                onUpdateConfig={setConfig}
+                onUpdateMenu={handleUpdateMenu}
+                onUpdateConfig={handleUpdateConfig}
                 onUpdateReviews={setReviews}
                 onUpdateCoupons={setCoupons}
                 onUpdateOrders={setOrders}
@@ -385,6 +542,7 @@ export default function App() {
             
             <ReviewsSection 
               reviews={reviews} 
+              onUpdateReviews={setReviews}
               onSubmitReview={handleReviewSubmission} 
             />
             

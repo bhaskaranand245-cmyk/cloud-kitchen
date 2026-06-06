@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MenuItem, Order, Review, Coupon, CustomConfig, PaymentGateway, PaymentSettings, Enquiry } from '../types';
+import { MenuItem, Order, Review, Coupon, CustomConfig, PaymentGateway, PaymentSettings, Enquiry, Feedback } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
@@ -7,7 +7,7 @@ import {
 import { 
   LayoutDashboard, ShoppingCart, Plus, Edit2, Trash2, Settings, Star, MessageSquareCode,
   Sparkles, Check, CheckSquare, RefreshCw, Smartphone, Download, MapPin, Ticket, ShieldAlert,
-  ArrowUp, ArrowDown, X, Image, Camera, Upload, CreditCard, Lock, Clock
+  ArrowUp, ArrowDown, X, Image, Camera, Upload, CreditCard, Lock, Clock, ThumbsUp, AlertCircle, CheckCircle
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -107,6 +107,8 @@ export default function AdminDashboard({
       });
       if (res.ok) {
         const data = await res.json();
+        // Save database configuration update to client local storage backup for session and reboot durability
+        localStorage.setItem('bhagwati_custom_config', JSON.stringify(data.config));
         onUpdateConfig(data.config);
         setPaymentSettingsSaveMsg("🎉 Payment configurations updated dynamically on backend database!");
         setTimeout(() => setPaymentSettingsSaveMsg(''), 5000);
@@ -122,7 +124,7 @@ export default function AdminDashboard({
 
   // Support Enquiries State Managers
   const [enquirySearchQuery, setEnquirySearchQuery] = useState('');
-  const [enquiryFilter, setEnquiryFilter] = useState<'All' | 'Pending' | 'Resolved'>('All');
+  const [enquiryFilter, setEnquiryFilter] = useState<'All' | 'Pending' | 'Open' | 'In Progress' | 'Waiting for Customer' | 'Resolved' | 'Closed'>('All');
   const [isEnquirySubmitting, setIsEnquirySubmitting] = useState<{ [id: string]: boolean }>({});
   const [enquiryDraftText, setEnquiryDraftText] = useState<{ [id: string]: string }>({});
   const [isEnquiryDrafting, setIsEnquiryDrafting] = useState<{ [id: string]: boolean }>({});
@@ -173,6 +175,11 @@ export default function AdminDashboard({
   const [configEmail, setConfigEmail] = useState(config.email);
   const [configAddress, setConfigAddress] = useState(config.address);
   const [configPincodes, setConfigPincodes] = useState(config.allowedPincodes.join(', '));
+  const [configMapUrl, setConfigMapUrl] = useState(config.googleMapEmbedUrl ?? '');
+  const [configIsServiceAreaOnly, setConfigIsServiceAreaOnly] = useState(config.isUnderServiceAreaOnly ?? true);
+  const [configGstPercent, setConfigGstPercent] = useState(config.gstPercent ?? 5);
+  const [configDeliveryCharge, setConfigDeliveryCharge] = useState(config.deliveryCharge ?? 30);
+  const [configLoyaltyPoints, setConfigLoyaltyPoints] = useState(config.loyaltyPointsPer100 ?? 10);
   const [isConfigSaving, setIsConfigSaving] = useState(false);
   const [configSaveMsg, setConfigSaveMsg] = useState('');
 
@@ -204,6 +211,21 @@ export default function AdminDashboard({
       if (!prev || prev.allowedPincodes.join(', ') !== config.allowedPincodes.join(', ')) {
         setConfigPincodes(config.allowedPincodes.join(', '));
       }
+      if (!prev || prev.googleMapEmbedUrl !== config.googleMapEmbedUrl) {
+        setConfigMapUrl(config.googleMapEmbedUrl ?? '');
+      }
+      if (!prev || prev.isUnderServiceAreaOnly !== config.isUnderServiceAreaOnly) {
+        setConfigIsServiceAreaOnly(config.isUnderServiceAreaOnly ?? true);
+      }
+      if (!prev || prev.gstPercent !== config.gstPercent) {
+        setConfigGstPercent(config.gstPercent ?? 5);
+      }
+      if (!prev || prev.deliveryCharge !== config.deliveryCharge) {
+        setConfigDeliveryCharge(config.deliveryCharge ?? 30);
+      }
+      if (!prev || prev.loyaltyPointsPer100 !== config.loyaltyPointsPer100) {
+        setConfigLoyaltyPoints(config.loyaltyPointsPer100 ?? 10);
+      }
       if (!prev || prev.closingTime !== config.closingTime) {
         setConfigClosingTime(config.closingTime ?? "22:00");
       }
@@ -233,6 +255,39 @@ export default function AdminDashboard({
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const [reviewReplyDraft, setReviewReplyDraft] = useState('');
   const [isAIDraftingReply, setIsAIDraftingReply] = useState(false);
+
+  // Modern Reviews & Feedback Management States
+  const [reviewsSubTab, setReviewsSubTab] = useState<'analytics' | 'moderation' | 'feedback'>('analytics');
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [isFeedbacksLoading, setIsFeedbacksLoading] = useState(false);
+  const [feedbackCategoryFilter, setFeedbackCategoryFilter] = useState<string>('All');
+  const [feedbackPriorityFilter, setFeedbackPriorityFilter] = useState<string>('All');
+  const [moderationStatusFilter, setModerationStatusFilter] = useState<string>('All');
+  const [moderationNotesDraft, setModerationNotesDraft] = useState<{ [id: string]: string }>({});
+  const [reviewsSearchKeyword, setReviewsSearchKeyword] = useState('');
+  const [feedbackSearchKeyword, setFeedbackSearchKeyword] = useState('');
+  const [editingFeedbackNotes, setEditingFeedbackNotes] = useState<{ [id: string]: string }>({});
+
+  const fetchFeedbacks = async () => {
+    setIsFeedbacksLoading(true);
+    try {
+      const res = await fetch('/api/initial-state');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.feedbacks) {
+          setFeedbacks(data.feedbacks);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load feedbacks client-side: ", err);
+    } finally {
+      setIsFeedbacksLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFeedbacks();
+  }, [activeTab]);
 
   // Load analytics
   const fetchAnalytics = async () => {
@@ -410,6 +465,11 @@ export default function AdminDashboard({
           email: configEmail,
           address: configAddress,
           allowedPincodes: parsedPincodes,
+          googleMapEmbedUrl: configMapUrl,
+          isUnderServiceAreaOnly: configIsServiceAreaOnly,
+          gstPercent: Number(configGstPercent),
+          deliveryCharge: Number(configDeliveryCharge),
+          loyaltyPointsPer100: Number(configLoyaltyPoints),
           closingTime: configClosingTime,
           openingTime: configOpeningTime,
           isCloseCurtainEnabled: configIsCloseCurtainEnabled,
@@ -418,8 +478,10 @@ export default function AdminDashboard({
       });
       if (res.ok) {
         const data = await res.json();
+        // Save database configuration update to client local storage backup for session and reboot durability
+        localStorage.setItem('bhagwati_custom_config', JSON.stringify(data.config));
         onUpdateConfig(data.config);
-        setConfigSaveMsg("Business settings configuration & kitchen curfew curfew rules updated successfully on server.");
+        setConfigSaveMsg("Business settings configuration & kitchen curfew rules updated successfully on server.");
       }
     } catch (err) {
       setConfigSaveMsg("Connection issue with settings payload.");
@@ -533,6 +595,39 @@ export default function AdminDashboard({
     }
   };
 
+  const handleSetReviewStatus = async (revId: string, status: 'Approved' | 'Rejected' | 'Flagged' | 'Pending') => {
+    try {
+      const res = await fetch(`/api/reviews/${revId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, isApproved: status === 'Approved' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onUpdateReviews(data.reviews);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveModerationNotes = async (revId: string, notes: string) => {
+    try {
+      const res = await fetch(`/api/reviews/${revId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moderationNotes: notes })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onUpdateReviews(data.reviews);
+        alert("Moderator notes persisted successfully!");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Support Enquiries Handler Operations
   const handleGenerateEnquiryReply = async (enq: Enquiry) => {
     setEnquiryActionMsg('');
@@ -573,6 +668,26 @@ export default function AdminDashboard({
       return;
     }
 
+    const enq = enquiries.find(e => e.id === enqId);
+    if (!enq) return;
+
+    const newAgentMsg = {
+      id: `reply-${Date.now()}`,
+      sender: 'agent' as const,
+      message: replyText.trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedThread = enq.thread ? [...enq.thread, newAgentMsg] : [
+      {
+        id: `init-${Date.now()}`,
+        sender: 'customer' as const,
+        message: enq.message,
+        createdAt: enq.createdAt
+      },
+      newAgentMsg
+    ];
+
     setIsEnquirySubmitting(prev => ({ ...prev, [enqId]: true }));
     try {
       const res = await fetch(`/api/enquiries/${enqId}`, {
@@ -580,14 +695,17 @@ export default function AdminDashboard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'Resolved',
-          replyText: replyText.trim()
+          replyText: replyText.trim(),
+          thread: updatedThread,
+          updatedAt: new Date().toISOString()
         })
       });
 
       if (res.ok) {
         const data = await res.json();
         onUpdateEnquiries(data.enquiries);
-        setEnquiryActionMsg("🎉 Customer enquiry resolved and response reply registered!");
+        setEnquiryDraftText(prev => ({ ...prev, [enqId]: '' }));
+        setEnquiryActionMsg("🎉 Customer support ticket resolved and response reply registered!");
       } else {
         setEnquiryActionError("Failed to update enquiry status on server.");
       }
@@ -677,11 +795,35 @@ export default function AdminDashboard({
     document.body.removeChild(link);
   };
 
+  const handleUpdateTicketField = async (enqId: string, fields: Partial<Enquiry>) => {
+    setEnquiryActionMsg('');
+    setEnquiryActionError('');
+    try {
+      const res = await fetch(`/api/enquiries/${enqId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onUpdateEnquiries(data.enquiries);
+        setEnquiryActionMsg("🎉 Support Ticket properties modified successfully!");
+      } else {
+        setEnquiryActionError("Failed to update ticket state on server.");
+      }
+    } catch (err) {
+      console.error(err);
+      setEnquiryActionError("Connection error updating support ticket.");
+    }
+  };
+
   // Support helpdesk enquiry filters & stats metrics
   const filteredEnquiries = enquiries.filter(enq => {
     const matchesSearch = 
       enq.name.toLowerCase().includes(enquirySearchQuery.toLowerCase()) ||
       (enq.email || '').toLowerCase().includes(enquirySearchQuery.toLowerCase()) ||
+      (enq.mobile || '').toLowerCase().includes(enquirySearchQuery.toLowerCase()) ||
+      (enq.category || '').toLowerCase().includes(enquirySearchQuery.toLowerCase()) ||
       enq.subject.toLowerCase().includes(enquirySearchQuery.toLowerCase()) ||
       enq.message.toLowerCase().includes(enquirySearchQuery.toLowerCase());
 
@@ -693,8 +835,8 @@ export default function AdminDashboard({
   });
 
   const totalEnquiriesCount = enquiries.length;
-  const pendingEnquiriesCount = enquiries.filter(e => e.status === 'Pending').length;
-  const resolvedEnquiriesCount = enquiries.filter(e => e.status === 'Resolved').length;
+  const pendingEnquiriesCount = enquiries.filter(e => e.status !== 'Resolved' && e.status !== 'Closed').length;
+  const resolvedEnquiriesCount = enquiries.filter(e => e.status === 'Resolved' || e.status === 'Closed').length;
 
   // Recharts color palettes
   const COLORS = ['#EA580C', '#800020', '#D4AF37', '#059669', '#2563EB', '#D97706', '#DB2777'];
@@ -1598,94 +1740,741 @@ export default function AdminDashboard({
         {/* REVIEWS APPROVER TAB & AI REPLY DRAFTER */}
         {activeTab === 'Reviews' && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-serif font-extrabold text-neutral-900">Manage Customer Feedback</h2>
-              <p className="text-xs text-neutral-500 font-sans">Approve, deny, or compose warm professional responses to customer testimonials instantly using Google Gemini.</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-serif font-extrabold text-neutral-900">Feedback & Reputation Desk</h2>
+                <p className="text-xs text-neutral-500 font-sans">Moderate customer testimonials, deep-dive into satisfaction ratings, and analyze suggestions/complaints logs in real time.</p>
+              </div>
+
+              {/* Sub tab select button row */}
+              <div className="flex bg-neutral-100 p-1 rounded-2xl border border-neutral-200 self-start md:self-auto shrink-0">
+                <button
+                  onClick={() => setReviewsSubTab('analytics')}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                    reviewsSubTab === 'analytics'
+                      ? 'bg-[#800020] text-white shadow-xs'
+                      : 'text-neutral-600 hover:text-neutral-950 hover:bg-neutral-200/50'
+                  }`}
+                >
+                  📊 Interactive Analytics
+                </button>
+                <button
+                  onClick={() => setReviewsSubTab('moderation')}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                    reviewsSubTab === 'moderation'
+                      ? 'bg-[#800020] text-white shadow-xs'
+                      : 'text-neutral-600 hover:text-neutral-950 hover:bg-neutral-200/50'
+                  }`}
+                >
+                  🛡️ Moderation Queue
+                  {reviews.filter(r => r.status === 'Pending').length > 0 && (
+                    <span className="w-2 h-2 rounded-full bg-orange-600 animate-ping inline-block" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setReviewsSubTab('feedback')}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                    reviewsSubTab === 'feedback'
+                      ? 'bg-[#800020] text-white shadow-xs'
+                      : 'text-neutral-600 hover:text-neutral-950 hover:bg-neutral-200/50'
+                  }`}
+                >
+                  💬 Suggestions Log
+                  {feedbacks.filter(f => !f.isAddressed).length > 0 && (
+                    <span className="bg-orange-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-sans font-black">
+                      {feedbacks.filter(f => !f.isAddressed).length}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div className="divide-y divide-neutral-200 border rounded-3xl bg-white shadow-xs overflow-hidden">
-              {reviews.map((rev) => (
-                <div key={rev.id} className="p-6 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-bold text-sm text-neutral-900">{rev.name}</h4>
-                      <div className="flex gap-0.5 text-amber-500 mt-0.5">
-                        {Array.from({ length: rev.rating }).map((_, i) => (
-                          <Star key={i} className="w-3.5 h-3.5 fill-amber-500" />
-                        ))}
+            {/* Sub-Tab 1: REVIEWS ANALYTICS DASHBOARD */}
+            {reviewsSubTab === 'analytics' && (() => {
+              // Calculate aggregated metrics
+              const totalRatingSum = reviews.reduce((acc, r) => acc + r.rating, 0);
+              const avgRatingValue = reviews.length > 0 ? (totalRatingSum / reviews.length).toFixed(1) : "0.0";
+              const fiveStarCount = reviews.filter(r => r.rating === 5).length;
+              const fourStarCount = reviews.filter(r => r.rating === 4).length;
+              const threeStarCount = reviews.filter(r => r.rating === 3).length;
+              const twoStarCount = reviews.filter(r => r.rating === 2).length;
+              const oneStarCount = reviews.filter(r => r.rating === 1).length;
+
+              const totalCount = reviews.length || 1;
+              const satisfiedPct = (((fiveStarCount + fourStarCount) / totalCount) * 100).toFixed(0);
+              const totalHelpfulClicks = reviews.reduce((acc, r) => acc + (r.helpfulCount || 0), 0);
+              const responseRate = reviews.length > 0 
+                ? (((reviews.filter(r => r.replyText).length) / reviews.length) * 100).toFixed(0)
+                : "100";
+
+              // Sentiment data for recharts
+              const chartsData = [
+                { name: '5 ★', count: fiveStarCount, pct: ((fiveStarCount / totalCount) * 100).toFixed(0) },
+                { name: '4 ★', count: fourStarCount, pct: ((fourStarCount / totalCount) * 100).toFixed(0) },
+                { name: '3 ★', count: threeStarCount, pct: ((threeStarCount / totalCount) * 100).toFixed(0) },
+                { name: '2 ★', count: twoStarCount, pct: ((twoStarCount / totalCount) * 100).toFixed(0) },
+                { name: '1 ★', count: oneStarCount, pct: ((oneStarCount / totalCount) * 100).toFixed(0) },
+              ];
+
+              const totalSuggestions = feedbacks.filter(f => f.category === 'Suggestion').length;
+              const totalComplaints = feedbacks.filter(f => f.category === 'Complaint').length;
+              const totalFeatures = feedbacks.filter(f => f.category === 'Feature Request').length;
+              const totalGeneral = feedbacks.filter(f => f.category === 'General Feedback').length;
+
+              const feedbackPieData = [
+                { name: 'Suggestions', value: totalSuggestions, color: '#800020' },
+                { name: 'Complaints', value: totalComplaints, color: '#EA580C' },
+                { name: 'Feature Requests', value: totalFeatures, color: '#3B82F6' },
+                { name: 'General', value: totalGeneral, color: '#10B981' },
+              ].filter(item => item.value > 0);
+
+              return (
+                <div className="space-y-6 animate-fadeIn">
+                  {/* Grid of Stats Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white p-5 rounded-2xl border border-neutral-200/60 shadow-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-neutral-400 font-extrabold uppercase tracking-wider block">Average Rating Score</span>
+                        <h3 className="text-3xl font-serif font-black text-neutral-900 mt-1">{avgRatingValue} ★</h3>
+                        <p className="text-[10px] text-neutral-500 mt-1 leading-relaxed">Based on {reviews.length} authentic feedbacks.</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center font-bold">
+                        ★
                       </div>
                     </div>
-                    <span className="text-[10px] text-neutral-400 font-sans font-medium">
-                      Date: {new Date(rev.date).toLocaleDateString()}
-                    </span>
+
+                    <div className="bg-white p-5 rounded-2xl border border-neutral-200/60 shadow-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-neutral-400 font-extrabold uppercase tracking-wider block">Customer Satisfaction Match</span>
+                        <h3 className="text-3xl font-serif font-black text-[#800020] mt-1">{satisfiedPct}%</h3>
+                        <p className="text-[10px] text-neutral-500 mt-1 leading-relaxed">Percentage of 4 and 5-star testimonials.</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold">
+                        ♥
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-2xl border border-neutral-200/60 shadow-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-neutral-400 font-extrabold uppercase tracking-wider block">Instant Response Rate</span>
+                        <h3 className="text-3xl font-serif font-black text-emerald-600 mt-1">{responseRate}%</h3>
+                        <p className="text-[10px] text-neutral-500 mt-1 leading-relaxed">Reviews replied on or automated via Gemini.</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                        ⚡
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-2xl border border-neutral-200/60 shadow-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-neutral-400 font-extrabold uppercase tracking-wider block">Helpful Upvotes Received</span>
+                        <h3 className="text-3xl font-serif font-black text-blue-600 mt-1">{totalHelpfulClicks}</h3>
+                        <p className="text-[10px] text-neutral-500 mt-1 leading-relaxed">Community-marked high trust indicators.</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                        👍
+                      </div>
+                    </div>
                   </div>
 
-                  <p className="text-xs text-neutral-700 leading-relaxed font-sans italic">
-                    &ldquo;{rev.comment}&rdquo;
-                  </p>
-
-                  {/* AI drafting tool */}
-                  <div className="bg-neutral-50 p-4 rounded-2xl border flex flex-col md:flex-row gap-4 justify-between items-stretch">
-                    <div className="flex-1 space-y-2">
-                      <p className="text-[10px] uppercase font-extrabold text-neutral-400 tracking-wider flex items-center gap-1.5">
-                        <MessageSquareCode className="w-4 h-4 text-orange-600" /> Executive AI Respondent
-                      </p>
+                  {/* Graphs container layout */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Rating Distribution list progress bars */}
+                    <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-neutral-200/60 shadow-xs space-y-4">
+                      <h3 className="text-sm font-bold text-neutral-900 tracking-tight flex items-center gap-2">
+                        🌟 Rating Distribution Trend Matrix
+                      </h3>
+                      <p className="text-xs text-neutral-400 font-medium font-sans mb-4">Relative frequency metrics computed dynamically across reviews database.</p>
                       
-                      {activeReviewId === rev.id ? (
-                        <div className="space-y-3">
-                          <textarea
-                            rows={3}
-                            value={reviewReplyDraft}
-                            onChange={(e) => setReviewReplyDraft(e.target.value)}
-                            className="w-full p-2.5 text-xs bg-white border rounded-xl focus:ring-1 focus:ring-orange-600 focus:outline-none"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handlePublishReply(rev.id)}
-                              className="px-4 py-1.5 bg-red-950 font-bold text-[10px] text-white rounded-lg hover:bg-orange-600 transition"
-                            >
-                              Publish Response Reply
-                            </button>
-                            <button
-                              onClick={() => {
-                                setActiveReviewId(null);
-                                setReviewReplyDraft('');
-                              }}
-                              className="px-4 py-1.5 bg-neutral-200 font-bold text-[10px] text-neutral-700 rounded-lg"
-                            >
-                              Discard Reply
-                            </button>
+                      <div className="space-y-4">
+                        {chartsData.map((dataObj) => (
+                          <div key={dataObj.name} className="space-y-1">
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-neutral-700 block font-serif">{dataObj.name}</span>
+                              <span className="text-neutral-500 block font-mono">
+                                {dataObj.count} submissions ({dataObj.pct}%)
+                              </span>
+                            </div>
+                            <div className="w-full bg-neutral-100 h-2.5 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-orange-600 h-2.5 rounded-full transition-all duration-500" 
+                                style={{ width: `${dataObj.pct}%` }} 
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Positive vs Negative Mood trends */}
+                      <div className="pt-4 border-t border-dashed mt-6 flex justify-around text-center gap-2">
+                        <div>
+                          <span className="text-neutral-400 text-[10px] uppercase font-extrabold block">Positive Sentiments</span>
+                          <span className="text-emerald-600 font-serif font-black text-xl">{((fiveStarCount + fourStarCount) / totalCount * 100).toFixed(0)}%</span>
+                        </div>
+                        <div className="border-r border-neutral-200" />
+                        <div>
+                          <span className="text-neutral-400 text-[10px] uppercase font-extrabold block">Neutral Sentiments</span>
+                          <span className="text-amber-500 font-serif font-black text-xl">{(threeStarCount / totalCount * 100).toFixed(0)}%</span>
+                        </div>
+                        <div className="border-r border-neutral-200" />
+                        <div>
+                          <span className="text-neutral-400 text-[10px] uppercase font-extrabold block">Negative Sentiments</span>
+                          <span className="text-red-600 font-serif font-black text-xl">{((twoStarCount + oneStarCount) / totalCount * 100).toFixed(0)}%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Feedback category pie panel */}
+                    <div className="bg-white p-6 rounded-3xl border border-neutral-200/60 shadow-xs flex flex-col justify-between space-y-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-neutral-900 tracking-tight">
+                          💬 Submissions by Category
+                        </h3>
+                        <p className="text-xs text-neutral-400 mt-1 font-medium leading-relaxed">Proportions of feature requests, Suggestions or customer complaints.</p>
+                      </div>
+
+                      {feedbackPieData.length > 0 ? (
+                        <div className="space-y-4">
+                          <div className="h-44 flex items-center justify-center">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={feedbackPieData}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  outerRadius={65}
+                                  innerRadius={30}
+                                  paddingAngle={3}
+                                >
+                                  {feedbackPieData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                  ))}
+                                </Pie>
+                                <Tooltip />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            {feedbackPieData.map((item) => (
+                              <div key={item.name} className="flex items-center gap-1.5 text-xs">
+                                <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: item.color }} />
+                                <span className="text-neutral-600 font-medium truncate">{item.name}:</span>
+                                <span className="text-neutral-900 font-bold font-mono">{item.value}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       ) : (
-                        <p className="text-xs text-neutral-500 leading-relaxed">
-                          {rev.replyText ? `Replied: "${rev.replyText}"` : 'No response draft composed yet. Press compose parameters to use Google Gemini AI.'}
-                        </p>
+                        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-neutral-400 space-y-2">
+                          <MessageSquareCode className="w-8 h-8 opacity-40 animate-pulse" />
+                          <span className="text-xs">No feedback points logged yet to plot category ratios.</span>
+                        </div>
                       )}
                     </div>
+                  </div>
 
-                    {activeReviewId !== rev.id && (
-                      <button
-                        type="button"
-                        onClick={() => handleDraftReviewReply(rev)}
-                        disabled={isAIDraftingReply}
-                        className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-500 text-white font-extrabold text-[11px] rounded-xl cursor-pointer shadow-xs shrink-0 self-center"
-                      >
-                        {isAIDraftingReply ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Framing reply...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 text-amber-300" /> Compose AI Reply
-                          </>
-                        )}
-                      </button>
-                    )}
+                  {/* Highlight Testimonials Carousels */}
+                  <div className="bg-[#800020] text-amber-50 p-6 rounded-3xl border border-[#600015] leading-relaxed relative overflow-hidden shadow-xs">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/5 rounded-full blur-2xl -mr-10 -mt-10" />
+                    <h3 className="text-sm font-bold block mb-1 text-amber-400 tracking-wide uppercase">🔥 Featured High-Impact Testimonial</h3>
+                    <div className="space-y-2 mt-3">
+                      {reviews.filter(r => r.rating === 5).slice(0, 1).map((r) => (
+                        <div key={r.id} className="space-y-1">
+                          <p className="text-xs sm:text-sm italic font-serif leading-relaxed">
+                            &ldquo;{r.comment}&rdquo;
+                          </p>
+                          <p className="text-xs font-black text-amber-300 flex items-center gap-1">
+                            — {r.name} {r.isVerified && <span className="bg-amber-400/25 px-1.5 py-0.5 rounded-sm uppercase text-[8px] tracking-widest text-amber-100">Verified Diner</span>}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })()}
+
+            {/* Sub-Tab 2: MODERATION QUEUE WORKFLOW */}
+            {reviewsSubTab === 'moderation' && (() => {
+              // Filters & Searches inside reviews moderation
+              const filteredReviews = reviews.filter((rev) => {
+                const matchesStatus = moderationStatusFilter === 'All' 
+                  ? true 
+                  : (moderationStatusFilter === 'Pending' && rev.status === 'Pending') ||
+                    (moderationStatusFilter === 'Approved' && rev.status === 'Approved') ||
+                    (moderationStatusFilter === 'Rejected' && rev.status === 'Rejected') ||
+                    (moderationStatusFilter === 'Flagged' && rev.status === 'Flagged');
+                
+                const matchesKeyword = reviewsSearchKeyword.trim() === '' 
+                  ? true 
+                  : rev.name.toLowerCase().includes(reviewsSearchKeyword.toLowerCase()) ||
+                    rev.comment.toLowerCase().includes(reviewsSearchKeyword.toLowerCase()) ||
+                    (rev.title && rev.title.toLowerCase().includes(reviewsSearchKeyword.toLowerCase()));
+                return matchesStatus && matchesKeyword;
+              });
+
+              return (
+                <div className="space-y-4 animate-fadeIn">
+                  {/* Stats / Actions row bar */}
+                  <div className="bg-white p-4 rounded-2xl border border-neutral-200/50 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex flex-wrap gap-2">
+                      {['All', 'Pending', 'Approved', 'Rejected', 'Flagged'].map((statusOption) => (
+                        <button
+                          key={statusOption}
+                          onClick={() => setModerationStatusFilter(statusOption)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                            moderationStatusFilter === statusOption
+                              ? 'bg-[#800020] text-white shadow-xs'
+                              : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-600 border border-neutral-200'
+                          }`}
+                        >
+                          {statusOption === 'All' && '📋 '}
+                          {statusOption === 'Pending' && '🟡 '}
+                          {statusOption === 'Approved' && '🟢 '}
+                          {statusOption === 'Rejected' && '🔴 '}
+                          {statusOption === 'Flagged' && '🟠 '}
+                          {statusOption}
+                          <span className="text-[10px] opacity-75 font-mono ml-0.5">
+                            ({statusOption === 'All' ? reviews.length : 
+                              statusOption === 'Pending' ? reviews.filter(r => r.status === 'Pending').length :
+                              statusOption === 'Approved' ? reviews.filter(r => r.status === 'Approved').length :
+                              statusOption === 'Rejected' ? reviews.filter(r => r.status === 'Rejected').length :
+                              reviews.filter(r => r.status === 'Flagged').length
+                            })
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search testimonials..."
+                        value={reviewsSearchKeyword}
+                        onChange={(e) => setReviewsSearchKeyword(e.target.value)}
+                        className="w-full md:w-64 pl-8 pr-4 py-1.5 text-xs bg-neutral-50 border border-neutral-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-orange-600 focus:bg-white"
+                      />
+                      <span className="absolute left-2.5 top-2.5 text-neutral-400 text-xs">🔍</span>
+                      {reviewsSearchKeyword && (
+                        <button 
+                          onClick={() => setReviewsSearchKeyword('')} 
+                          className="absolute right-2.5 top-2.5 text-xs font-black text-neutral-400 hover:text-neutral-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* List of custom moderated customer reviews */}
+                  {filteredReviews.length > 0 ? (
+                    <div className="divide-y divide-neutral-200 border border-neutral-200/50 rounded-3xl bg-white shadow-xs overflow-hidden">
+                      {filteredReviews.map((rev) => {
+                        const isPending = rev.status === 'Pending';
+                        const isApp = rev.status === 'Approved';
+                        const isRej = rev.status === 'Rejected';
+                        const isFlag = rev.status === 'Flagged';
+
+                        return (
+                          <div key={rev.id} className="p-6 hover:bg-neutral-50/40 transition-colors space-y-4">
+                            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-extrabold text-[#800020] text-[15px]">{rev.name}</h4>
+                                  {rev.email && (
+                                    <span className="text-[10px] text-neutral-400 font-sans font-medium hover:text-neutral-600">
+                                      ({rev.email})
+                                    </span>
+                                  )}
+                                  {rev.isVerified && (
+                                    <span className="bg-green-100 text-green-800 text-[9px] font-black uppercase tracking-wide px-2 py-0.5 rounded-sm font-sans shrink-0">
+                                      ✓ Verified Customer Order
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="flex gap-0.5 text-amber-500">
+                                    {Array.from({ length: rev.rating }).map((_, i) => (
+                                      <Star key={i} className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                                    ))}
+                                  </div>
+                                  <span className="text-neutral-300">|</span>
+                                  <span className="text-[10px] text-neutral-400 font-sans font-bold">
+                                    {new Date(rev.date).toLocaleDateString()}
+                                  </span>
+                                  <span className="text-neutral-300">|</span>
+                                  <span className="text-[10px] text-neutral-400 font-bold font-mono">
+                                    Helpful upvotes: {rev.helpfulCount || 0}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {/* Status badges */}
+                                {isPending && <span className="bg-amber-100 text-amber-800 border border-amber-200 font-bold text-[10px] px-2.5 py-1 rounded-full">🟡 Pending Approver</span>}
+                                {isApp && <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[10px] px-2.5 py-1 rounded-full">🟢 Approved Widget</span>}
+                                {isRej && <span className="bg-red-100 text-red-800 border border-red-200 font-bold text-[10px] px-2.5 py-1 rounded-full">🔴 Rejected</span>}
+                                {isFlag && (
+                                  <div className="flex flex-col items-end">
+                                    <span className="bg-orange-100 text-orange-800 border border-orange-200 font-bold text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1 animate-pulse">
+                                      🟠 Flagged & Reported
+                                    </span>
+                                    {rev.reportReason && (
+                                      <span className="text-[9px] text-orange-600 font-semibold mt-1 max-w-xs text-right">
+                                        Reason: "{rev.reportReason}"
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <h5 className="font-bold text-neutral-900 text-xs sm:text-sm font-sans">{rev.title || "Untitled Testimonial Review"}</h5>
+                              <p className="text-xs sm:text-sm text-neutral-700 leading-relaxed font-sans italic bg-neutral-50 p-3 rounded-xl border border-neutral-200/50">
+                                &ldquo;{rev.comment}&rdquo;
+                              </p>
+                            </div>
+
+                            {/* Moderation notes textbox */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                              {/* Left column: Quick status transition triggers */}
+                              <div className="space-y-2.5">
+                                <span className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-widest block">Governance Action Workflow</span>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    onClick={() => handleSetReviewStatus(rev.id, 'Approved')}
+                                    disabled={isApp}
+                                    className="px-3.5 py-1.5 bg-emerald-600 text-white font-extrabold text-[10px] rounded-lg cursor-pointer hover:bg-emerald-700 transition disabled:opacity-40"
+                                  >
+                                    ✓ Approve & Publish
+                                  </button>
+                                  <button
+                                    onClick={() => handleSetReviewStatus(rev.id, 'Rejected')}
+                                    disabled={isRej}
+                                    className="px-3.5 py-1.5 bg-red-600 text-white font-extrabold text-[10px] rounded-lg cursor-pointer hover:bg-red-700 transition disabled:opacity-40"
+                                  >
+                                    ✕ Reject
+                                  </button>
+                                  <button
+                                    onClick={() => handleSetReviewStatus(rev.id, 'Flagged')}
+                                    disabled={isFlag}
+                                    className="px-3.5 py-1.5 bg-orange-500 text-white font-extrabold text-[10px] rounded-lg cursor-pointer hover:bg-orange-600 transition disabled:opacity-40"
+                                  >
+                                    ⚠ Flag Spam
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm("Delete this review forever?")) {
+                                        const res = await fetch(`/api/reviews/${rev.id}`, { method: 'DELETE' });
+                                        if (res.ok) {
+                                          const data = await res.json();
+                                          onUpdateReviews(data.reviews);
+                                        }
+                                      }
+                                    }}
+                                    className="p-1 text-neutral-400 hover:text-red-700 transition"
+                                    title="Delete Forever"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+
+                                <div className="space-y-1.5 bg-neutral-50 p-3 rounded-xl border">
+                                  <div className="flex justify-between items-center">
+                                    <label className="text-[9px] uppercase font-bold text-neutral-600">Private Moderator Notes</label>
+                                    <button
+                                      onClick={() => handleSaveModerationNotes(rev.id, moderationNotesDraft[rev.id] || '')}
+                                      className="text-[9px] font-bold text-[#800020] hover:underline"
+                                    >
+                                      Save Notes
+                                    </button>
+                                  </div>
+                                  <input 
+                                    type="text"
+                                    placeholder="Write admin checklist, customer context, or spam flags..."
+                                    value={moderationNotesDraft[rev.id] !== undefined ? moderationNotesDraft[rev.id] : (rev.moderationNotes || '')}
+                                    onChange={(e) => setModerationNotesDraft({ ...moderationNotesDraft, [rev.id]: e.target.value })}
+                                    className="w-full bg-white border border-neutral-300 rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-orange-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Right column: Gemini or custom owner Response */}
+                              <div className="space-y-2 bg-neutral-50/60 p-3 rounded-2xl border flex flex-col justify-between">
+                                <div className="space-y-1.5">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[10px] uppercase font-extrabold text-[#800020] tracking-wider flex items-center gap-1.5">
+                                      <MessageSquareCode className="w-4 h-4 text-orange-600 shrink-0" /> Executive AI Respondent
+                                    </span>
+                                    {activeReviewId !== rev.id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDraftReviewReply(rev)}
+                                        disabled={isAIDraftingReply}
+                                        className="text-[9px] font-extrabold text-[#800020] hover:underline flex items-center gap-0.5"
+                                      >
+                                        <Sparkles className="w-3 h-3 text-amber-500 shrink-0" /> Draft Reply
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {activeReviewId === rev.id ? (
+                                    <div className="space-y-2">
+                                      <textarea
+                                        rows={2}
+                                        value={reviewReplyDraft}
+                                        onChange={(e) => setReviewReplyDraft(e.target.value)}
+                                        className="w-full p-2 text-xs bg-white border border-neutral-300 rounded-lg focus:ring-1 focus:ring-orange-600 focus:outline-none"
+                                      />
+                                      <div className="flex gap-1.5">
+                                        <button
+                                          onClick={() => handlePublishReply(rev.id)}
+                                          className="px-2 py-1 bg-red-950 text-white font-extrabold text-[9px] rounded-md hover:bg-orange-600 transition"
+                                        >
+                                          Publish
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setActiveReviewId(null);
+                                            setReviewReplyDraft('');
+                                          }}
+                                          className="px-2 py-1 bg-neutral-200 text-neutral-700 font-extrabold text-[9px] rounded-md"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-neutral-500 leading-relaxed font-serif italic">
+                                      {rev.replyText ? `&ldquo;${rev.replyText}&rdquo;` : "No public customer reply has been written or drafted yet."}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-16 border rounded-3xl bg-white shadow-xs text-center space-y-3">
+                      <ShieldAlert className="w-10 h-10 text-neutral-300 mx-auto animate-pulse" />
+                      <h4 className="font-extrabold text-neutral-700 text-sm">No testimonies matched the criteria.</h4>
+                      <p className="text-xs text-neutral-400 font-sans max-w-sm mx-auto">Try clearing search phrases or changing the rating moderation filter pills above.</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Sub-Tab 3: GLOBAL CUSTOMER FEEDBACK & SUGGESTIONS LOGS */}
+            {reviewsSubTab === 'feedback' && (() => {
+              // Filters & Searches inside feedbacks log
+              const filteredFeedbacks = feedbacks.filter((feed) => {
+                const matchesCategory = feedbackCategoryFilter === 'All' ? true : feed.category === feedbackCategoryFilter;
+                const matchesPriority = feedbackPriorityFilter === 'All' ? true : feed.priority === feedbackPriorityFilter;
+                
+                const matchesKeyword = feedbackSearchKeyword.trim() === '' 
+                  ? true 
+                  : feed.name.toLowerCase().includes(feedbackSearchKeyword.toLowerCase()) ||
+                    feed.email.toLowerCase().includes(feedbackSearchKeyword.toLowerCase()) ||
+                    feed.message.toLowerCase().includes(feedbackSearchKeyword.toLowerCase());
+                
+                return matchesCategory && matchesPriority && matchesKeyword;
+              });
+
+              return (
+                <div className="space-y-4 animate-fadeIn">
+                  {/* Filters Header Dashboard Card */}
+                  <div className="bg-white p-5 rounded-3xl border border-neutral-200/50 shadow-xs space-y-4">
+                    <div className="flex flex-col md:flex-row gap-4 items-stretch justify-between">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-extrabold uppercase tracking-wider text-neutral-400 block font-sans">Filter by Categorization Label</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {['All', 'Suggestion', 'Complaint', 'Feature Request', 'General Feedback'].map((category) => (
+                            <button
+                              key={category}
+                              onClick={() => setFeedbackCategoryFilter(category)}
+                              className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                                feedbackCategoryFilter === category
+                                  ? 'bg-orange-600 text-white shadow-xs'
+                                  : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-600 border border-neutral-200'
+                              }`}
+                            >
+                              {category}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-extrabold uppercase tracking-wider text-neutral-400 block font-sans">Filter by Urgent Severity</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {['All', 'Low', 'Medium', 'High', 'Urgent'].map((pri) => (
+                            <button
+                              key={pri}
+                              onClick={() => setFeedbackPriorityFilter(pri)}
+                              className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                                feedbackPriorityFilter === pri
+                                  ? 'bg-[#800020] text-amber-100 shadow-xs'
+                                  : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-600 border border-neutral-200'
+                              }`}
+                            >
+                              {pri}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="relative pt-2">
+                      <input
+                        type="text"
+                        placeholder="Search feedback contents, writer name, or email lists..."
+                        value={feedbackSearchKeyword}
+                        onChange={(e) => setFeedbackSearchKeyword(e.target.value)}
+                        className="w-full pl-8 pr-4 py-2 text-xs bg-neutral-50 border border-neutral-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-orange-600 focus:bg-white"
+                      />
+                      <span className="absolute left-2.5 top-4.5 text-neutral-400 text-xs">🔍</span>
+                      {feedbackSearchKeyword && (
+                        <button 
+                          onClick={() => setFeedbackSearchKeyword('')} 
+                          className="absolute right-2.5 top-4 text-xs font-black text-neutral-400 hover:text-neutral-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Feedback table or list layout */}
+                  {isFeedbacksLoading ? (
+                    <div className="p-16 text-center text-xs text-neutral-400 bg-white border rounded-3xl animate-pulse">
+                      Refreshing cloud logs...
+                    </div>
+                  ) : filteredFeedbacks.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredFeedbacks.map((feed) => {
+                        const isAddressed = feed.isAddressed;
+                        return (
+                          <div 
+                            key={feed.id} 
+                            className={`p-5 rounded-2xl border transition-all ${
+                              isAddressed 
+                                ? 'bg-neutral-50/70 border-neutral-200/50 opacity-75' 
+                                : 'bg-white border-neutral-200 shadow-xs border-l-4 border-l-[#800020]'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start gap-2 mb-3">
+                              <div>
+                                <h4 className="font-extrabold text-neutral-900 text-sm">{feed.name}</h4>
+                                <span className="text-[10px] text-neutral-400 font-mono block mt-0.5">{feed.email}</span>
+                              </div>
+
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                <span className={`text-[9px] font-black uppercase tracking-wide px-2 py-0.5 rounded-sm ${
+                                  feed.priority === 'Urgent' ? 'bg-red-100 text-red-800 border border-red-200' :
+                                  feed.priority === 'High' ? 'bg-orange-100 text-orange-850 border border-orange-200' :
+                                  feed.priority === 'Medium' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-neutral-100 text-neutral-600'
+                                }`}>
+                                  {feed.priority} priority
+                                </span>
+                                <span className="text-[9px] font-bold text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-full mt-0.5">
+                                  {feed.category}
+                                </span>
+                              </div>
+                            </div>
+
+                            <p className="text-xs sm:text-sm text-neutral-700 leading-relaxed font-sans italic bg-neutral-50/50 p-3 rounded-xl border border-neutral-200 mb-4">
+                              &ldquo;{feed.message}&rdquo;
+                            </p>
+
+                            <div className="space-y-3 pt-3 border-t border-dashed border-neutral-200">
+                              <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-2 text-xs font-bold text-neutral-700 cursor-pointer">
+                                  <input 
+                                    type="checkbox"
+                                    checked={!!feed.isAddressed}
+                                    onChange={async (e) => {
+                                      const res = await fetch(`/api/feedback/${feed.id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ isAddressed: e.target.checked })
+                                      });
+                                      if (res.ok) {
+                                        await fetchFeedbacks(); // Reload loop
+                                      }
+                                    }}
+                                    className="w-4 h-4 rounded text-[#800020] focus:ring-[#800020]"
+                                  />
+                                  <span>Mark Subsidized & Addressed</span>
+                                </label>
+
+                                <button
+                                  onClick={async () => {
+                                    if (confirm("Delete feedback ticket forever?")) {
+                                      const res = await fetch(`/api/feedback/${feed.id}`, { method: 'DELETE' });
+                                      if (res.ok) {
+                                        await fetchFeedbacks();
+                                      }
+                                    }
+                                  }}
+                                  className="text-neutral-400 hover:text-red-700 text-xs flex items-center gap-1 font-bold"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                  Remove Log
+                                </button>
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="flex justify-between items-center text-[10px] font-extrabold text-neutral-400 uppercase">
+                                  <span>Resolution Action Notes</span>
+                                  <button
+                                    onClick={async () => {
+                                      const notesValue = editingFeedbackNotes[feed.id] !== undefined ? editingFeedbackNotes[feed.id] : (feed.notes || '');
+                                      const res = await fetch(`/api/feedback/${feed.id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ notes: notesValue })
+                                      });
+                                      if (res.ok) {
+                                        alert("Staff notes stored successfully.");
+                                        await fetchFeedbacks();
+                                      }
+                                    }}
+                                    className="text-[#800020] hover:underline"
+                                  >
+                                    Save Note
+                                  </button>
+                                </div>
+                                <input 
+                                  type="text"
+                                  placeholder="E.g. Spoken on call, added bhakri option..."
+                                  value={editingFeedbackNotes[feed.id] !== undefined ? editingFeedbackNotes[feed.id] : (feed.notes || '')}
+                                  onChange={(e) => setEditingFeedbackNotes({ ...editingFeedbackNotes, [feed.id]: e.target.value })}
+                                  className="w-full bg-white border rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-orange-600 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-16 border rounded-3xl bg-white shadow-xs text-center space-y-3">
+                      <AlertCircle className="w-10 h-10 text-neutral-300 mx-auto" />
+                      <h4 className="font-extrabold text-neutral-700 text-sm">No feedback logs match query rules.</h4>
+                      <p className="text-xs text-neutral-400 font-sans max-w-sm mx-auto">Try selecting another filter pill or emptying your lookup search bar.</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2323,6 +3112,93 @@ export default function AdminDashboard({
                   />
                 </div>
 
+                {/* Geological Coordinates & Real-time Delivery settings */}
+                <div className="bg-neutral-50/50 border border-neutral-100 p-6 rounded-2xl space-y-4">
+                  <h3 className="font-serif font-bold text-neutral-900 text-sm flex items-center gap-1.5 border-b pb-2">
+                    📍 Geographic Coordinates & Delivery Fees
+                  </h3>
+                  
+                  <div>
+                    <label className="text-xs font-semibold text-neutral-600 block mb-1">
+                      Google Maps Embed URL (Interactive Coordinates Link)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={configMapUrl}
+                      onChange={(e) => setConfigMapUrl(e.target.value)}
+                      className="w-full px-3.5 py-2 border rounded-xl text-xs font-mono"
+                      placeholder="https://www.google.com/maps/embed..."
+                    />
+                    <span className="text-[9px] text-neutral-400 block mt-1">
+                      Provide a standard Google Maps iframe embed URL. This serves coordinates immediately in the contact segment map portal.
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-600 block mb-1">FSSAI Standard GST Tax (%)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        required
+                        value={configGstPercent}
+                        onChange={(e) => setConfigGstPercent(Number(e.target.value))}
+                        className="w-full px-3.5 py-2 border rounded-xl font-mono text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-600 block mb-1">Standard Delivery Fee (₹)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        value={configDeliveryCharge}
+                        onChange={(e) => setConfigDeliveryCharge(Number(e.target.value))}
+                        className="w-full px-3.5 py-2 border rounded-xl font-mono text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-600 block mb-1">Loyalty Points Scale (per ₹100 spend)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        value={configLoyaltyPoints}
+                        onChange={(e) => setConfigLoyaltyPoints(Number(e.target.value))}
+                        className="w-full px-3.5 py-2 border rounded-xl font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
+                    <div className="space-y-0.5">
+                      <h4 className="font-bold text-neutral-700 text-xs">
+                        Strict Service Area Restriction Filter
+                      </h4>
+                      <p className="text-[10px] text-neutral-500 font-sans">
+                        Block orders if customer's delivery pincode does not reside in your allowed service area set above.
+                      </p>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        checked={configIsServiceAreaOnly}
+                        onChange={(e) => setConfigIsServiceAreaOnly(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-950"></div>
+                      <span className="ml-2 text-[11px] font-bold text-neutral-700">
+                        {configIsServiceAreaOnly ? "Restricted" : "Unrestricted"}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Intelligent Kitchen Curfew & Close Curtain Configurations */}
                 <div className="bg-orange-50/40 border border-orange-200/50 p-6 rounded-2xl space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-orange-100">
@@ -2485,20 +3361,22 @@ export default function AdminDashboard({
             {/* Filter and search bar */}
             <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-xs flex flex-col md:flex-row gap-4 items-center justify-between">
               {/* Category selector pills */}
-              <div className="flex gap-2 w-full md:w-auto">
-                {(['All', 'Pending', 'Resolved'] as const).map((filter) => {
-                  const count = filter === 'All' ? totalEnquiriesCount : filter === 'Pending' ? pendingEnquiriesCount : resolvedEnquiriesCount;
+              <div className="flex gap-1.5 w-full md:w-auto flex-wrap">
+                {(['All', 'Open', 'In Progress', 'Waiting for Customer', 'Resolved', 'Closed'] as const).map((filter) => {
+                  const count = filter === 'All' 
+                    ? totalEnquiriesCount 
+                    : enquiries.filter(e => e.status === filter || (filter === 'Open' && e.status === 'Pending')).length;
                   return (
                     <button
                       key={filter}
-                      onClick={() => setEnquiryFilter(filter)}
+                      onClick={() => setEnquiryFilter(filter as any)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                         enquiryFilter === filter
                           ? 'bg-red-950 text-white shadow-xs'
                           : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100 border border-neutral-200/50'
                       }`}
                     >
-                      {filter} <span className={`text-[10px] font-mono font-semibold px-1 rounded-sm ${enquiryFilter === filter ? 'bg-orange-600 text-white' : 'bg-neutral-200 text-neutral-600'}`}>{count}</span>
+                      {filter} <span className={`text-[9px] font-mono font-semibold px-1 rounded-sm ${enquiryFilter === filter ? 'bg-orange-600 text-white' : 'bg-neutral-200 text-neutral-600'}`}>{count}</span>
                     </button>
                   );
                 })}
@@ -2539,24 +3417,44 @@ export default function AdminDashboard({
                     <div key={enq.id} className="bg-white rounded-2xl border border-neutral-200/80 shadow-xs overflow-hidden transition hover:border-neutral-300">
                       
                       {/* Top banner */}
-                      <div className="p-5 border-b border-neutral-100 flex flex-col sm:flex-row justify-between items-start gap-4">
+                      <div className="p-5 border-b border-neutral-100 flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-neutral-50/10">
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-mono bg-neutral-100 text-neutral-600 border px-1.5 py-0.5 rounded-md font-bold">
+                            <span className="text-xs font-mono bg-neutral-100 text-neutral-600 border px-1.5 py-0.5 rounded-md font-bold font-sans">
                               {enq.id}
                             </span>
-                            <span className="text-xs font-serif font-extrabold text-neutral-800">
+                            <span className="text-sm font-serif font-extrabold text-neutral-900">
                               {enq.subject}
                             </span>
+                            
+                            {/* Priority Urgency flag */}
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase ${
+                              enq.priority === 'Critical' ? 'bg-red-50 text-red-700 border-red-200 animate-pulse' :
+                              enq.priority === 'High' ? 'bg-rose-50 text-rose-700 border-rose-200 font-sans' :
+                              enq.priority === 'Medium' ? 'bg-orange-50 text-orange-700 border-orange-200 font-sans' :
+                              'bg-neutral-50 text-neutral-600 border-neutral-200 font-sans'
+                            }`}>
+                              {enq.priority || 'Medium'} Priority
+                            </span>
+
+                            {/* Category flag */}
+                            <span className="text-[9px] font-semibold bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.5 rounded capitalize font-sans">
+                              {enq.category || 'General Inquiry'}
+                            </span>
+
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              enq.status === 'Pending' 
-                                ? 'bg-rose-50 text-rose-700 border-rose-100'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                              enq.status === 'Open' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                              enq.status === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                              enq.status === 'Waiting for Customer' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' :
+                              enq.status === 'Resolved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                              enq.status === 'Closed' ? 'bg-neutral-100 text-neutral-500 border-neutral-200' :
+                              'bg-rose-50 text-rose-700 border-rose-100' // Pending
                             }`}>
                               {enq.status}
                             </span>
                           </div>
-                          <div className="text-[11px] text-neutral-500 font-sans flex flex-wrap items-center gap-x-2 gap-y-1">
+                          
+                          <div className="text-[11px] text-neutral-500 font-sans flex flex-wrap items-center gap-x-2.5 gap-y-1">
                             <span className="font-bold text-neutral-700">{enq.name}</span>
                             {enq.email && (
                               <>
@@ -2564,9 +3462,57 @@ export default function AdminDashboard({
                                 <span className="underline hover:text-orange-600 transition">{enq.email}</span>
                               </>
                             )}
+                            {enq.mobile && (
+                              <>
+                                <span>•</span>
+                                <span className="font-mono">{enq.mobile}</span>
+                              </>
+                            )}
                             <span>•</span>
                             <span className="font-mono text-[10px]">{new Date(enq.createdAt).toLocaleString('en-IN')}</span>
                           </div>
+                        </div>
+
+                        {/* Interactive Assignee & properties modifiers */}
+                        <div className="flex flex-wrap gap-2 items-center">
+                          
+                          {/* Live assigned agent text field */}
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-neutral-500 shrink-0 font-sans">
+                            <span>Assignee:</span>
+                            <input
+                              type="text"
+                              value={enq.assignedAgent || ''}
+                              placeholder="Agent name"
+                              onChange={(e) => handleUpdateTicketField(enq.id, { assignedAgent: e.target.value })}
+                              className="px-2 py-1 text-[11px] bg-white border border-neutral-300 rounded-lg text-neutral-700 max-w-[100px] focus:ring-1 focus:ring-orange-600 focus:outline-none font-sans font-medium hover:border-neutral-400"
+                            />
+                          </div>
+
+                          {/* Quick Priority updates */}
+                          <select
+                            value={enq.priority || 'Medium'}
+                            onChange={(e) => handleUpdateTicketField(enq.id, { priority: e.target.value as any })}
+                            className="text-[11px] font-semibold bg-white border border-neutral-350 rounded-lg py-1 px-0.5 text-neutral-700 font-sans cursor-pointer focus:outline-none hover:border-neutral-400"
+                          >
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Critical">Critical</option>
+                          </select>
+
+                          {/* Quick Status selectors */}
+                          <select
+                            value={enq.status}
+                            onChange={(e) => handleUpdateTicketField(enq.id, { status: e.target.value as any })}
+                            className="text-[11px] font-bold bg-white border border-neutral-350 rounded-lg py-1 px-1 text-neutral-800 font-sans cursor-pointer focus:outline-none hover:border-neutral-400"
+                          >
+                            <option value="Open">Open</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Waiting for Customer">Waiting for Customer</option>
+                            <option value="Resolved">Resolved</option>
+                            <option value="Closed">Closed</option>
+                            <option value="Pending">Pending</option>
+                          </select>
                         </div>
 
                         {/* Action corner */}
@@ -2583,28 +3529,66 @@ export default function AdminDashboard({
 
                       {/* Msg bubble and replies */}
                       <div className="p-5 bg-neutral-50/50 space-y-4">
-                        <div className="bg-white p-4 rounded-xl border border-neutral-100 shadow-3xs leading-relaxed text-xs text-neutral-700 font-sans">
-                          {enq.message}
+                        
+                        {/* Conversation log threads list */}
+                        <div className="space-y-3 font-sans text-left">
+                          <span className="text-[10px] font-bold tracking-widest text-neutral-400 block uppercase font-sans">Conversations History Thread ({enq.thread?.length || 1})</span>
+                          
+                          {enq.thread && enq.thread.length > 0 ? (
+                            <div className="space-y-2.5 border-l border-neutral-300 pl-4 text-left">
+                              {enq.thread.map((tm, idx) => {
+                                const isAgentMsg = tm.sender === 'agent' || tm.sender === 'system';
+                                return (
+                                  <div key={tm.id || idx} className="text-xs space-y-1">
+                                    <div className="flex items-center gap-1.5 text-[9.5px] font-bold text-neutral-400 font-mono">
+                                      <span className={isAgentMsg ? "text-amber-850 font-bold font-sans" : "text-neutral-700"}>
+                                        {tm.sender === 'customer' ? 'Customer' : tm.sender === 'agent' ? `Executive Responder (${enq.assignedAgent || 'Bhagwati Staff'})` : 'System Notification'}
+                                      </span>
+                                      <span>•</span>
+                                      <span className="font-sans font-medium text-neutral-500">{new Date(tm.createdAt).toLocaleTimeString('en-IN')}</span>
+                                    </div>
+                                    <p className="text-neutral-800 leading-relaxed max-w-3xl whitespace-pre-wrap font-sans font-medium">{tm.message}</p>
+                                    
+                                    {tm.attachmentUrl && (
+                                      <div className="mt-2.5 p-1 bg-white border rounded-lg max-w-xs shadow-3xs text-left">
+                                        <span className="text-[8.5px] font-black text-emerald-800 block mb-1 font-sans">📋 Secure Ticket Attachment:</span>
+                                        <img 
+                                          src={tm.attachmentUrl} 
+                                          alt="Captured receipt screenshot" 
+                                          className="max-h-[140px] rounded border"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="bg-white p-4 rounded-xl border border-neutral-100 shadow-3xs leading-relaxed text-xs text-neutral-700 font-sans font-medium leading-relaxed">
+                              {enq.message}
+                            </div>
+                          )}
                         </div>
 
-                        {/* Resolved Reply Area */}
-                        {enq.status === 'Resolved' && enq.replyText && (
-                          <div className="p-4 bg-emerald-50/30 text-emerald-900 border border-emerald-100/40 rounded-xl flex items-start gap-3">
+                        {/* Resolved Reply Area feedback */}
+                        {enq.replyText && (
+                          <div className="p-4 bg-emerald-50/30 text-emerald-950 border border-emerald-100/40 rounded-xl flex items-start gap-3">
                             <div className="p-1 rounded-full bg-emerald-100 text-emerald-800 shrink-0 mt-0.5">
                               <Check className="w-3.5 h-3.5" />
                             </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-800">Owner Response reply registered:</p>
-                              <p className="text-xs font-sans whitespace-pre-line leading-relaxed">{enq.replyText}</p>
+                            <div className="space-y-1 text-left">
+                              <p className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-800">Primary solver response reply text:</p>
+                              <p className="text-xs font-sans whitespace-pre-line leading-relaxed font-semibold">{enq.replyText}</p>
                             </div>
                           </div>
                         )}
 
-                        {/* Pending Reply Form */}
-                        {enq.status === 'Pending' && (
-                          <div className="p-4 bg-orange-50/20 border border-orange-100/30 rounded-xl space-y-3">
+                        {/* Pending Reply Form or conversation logs update */}
+                        {(enq.status !== 'Resolved' && enq.status !== 'Closed') && (
+                          <div className="p-4 bg-neutral-100/40 border border-neutral-200/50 rounded-xl space-y-3">
                             <div className="flex items-center justify-between">
-                              <label className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 block">Response Formulation:</label>
+                              <label className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 block font-sans">Draft or dispatch ticket response reply:</label>
                               <button
                                 onClick={() => handleGenerateEnquiryReply(enq)}
                                 disabled={drafting}
@@ -2612,7 +3596,7 @@ export default function AdminDashboard({
                               >
                                 {drafting ? (
                                   <>
-                                    <RefreshCw className="w-3 h-3 animate-spin" /> Drafting suggestions...
+                                    <RefreshCw className="w-3 h-3 animate-spin animate-spin-fast" /> Drafting suggestions...
                                   </>
                                 ) : (
                                   <>
@@ -2634,14 +3618,14 @@ export default function AdminDashboard({
                               <button
                                 onClick={() => handleMarkAsResolvedDirectly(enq.id)}
                                 disabled={submitting}
-                                className="px-3 py-1.5 text-[10px] font-bold text-neutral-600 hover:bg-neutral-100 border rounded-lg transition shrink-0 cursor-pointer"
+                                className="px-3 py-1.5 text-[10px] font-bold text-neutral-600 hover:bg-neutral-100 border rounded-lg transition shrink-0 cursor-pointer font-sans"
                               >
                                 Mark Solved Direct (No Reply)
                               </button>
                               <button
                                 onClick={() => handlePublishEnquiryReply(enq.id)}
                                 disabled={submitting || !draftText.trim()}
-                                className="px-4 py-1.5 text-[10px] bg-red-950 hover:bg-orange-600 text-white rounded-lg font-bold transition shrink-0 cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                                className="px-4 py-1.5 text-[10px] bg-red-950 hover:bg-orange-600 text-white rounded-lg font-bold transition shrink-0 cursor-pointer flex items-center gap-1 disabled:opacity-50 font-sans"
                               >
                                 {submitting ? (
                                   <>

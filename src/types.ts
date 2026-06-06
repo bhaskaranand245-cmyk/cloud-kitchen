@@ -24,11 +24,31 @@ export interface Coupon {
 export interface Review {
   id: string;
   name: string;
+  email?: string;
   rating: number;
+  title?: string;
   comment: string;
   date: string;
   isApproved: boolean;
   replyText?: string;
+  status?: 'Pending' | 'Approved' | 'Rejected' | 'Flagged';
+  isVerified?: boolean;
+  helpfulCount?: number;
+  reported?: boolean;
+  reportReason?: string;
+  moderationNotes?: string;
+}
+
+export interface Feedback {
+  id: string;
+  name: string;
+  email: string;
+  category: 'Suggestion' | 'Complaint' | 'Feature Request' | 'General Feedback';
+  priority: 'Low' | 'Medium' | 'High' | 'Urgent';
+  message: string;
+  createdAt: string;
+  isAddressed?: boolean;
+  notes?: string;
 }
 
 export interface SubscriptionPlan {
@@ -51,12 +71,15 @@ export interface CustomConfig {
   allowedPincodes: string[];
   gstPercent: number;
   deliveryCharge: number;
+  loyaltyPointsPer105?: number; // legacy fallback if any
   loyaltyPointsPer100: number; // loyalty program
   paymentSettings?: PaymentSettings;
   closingTime?: string; // 24-hour format, e.g., "22:00"
   openingTime?: string; // 24-hour format, e.g., "08:00"
   isCloseCurtainEnabled?: boolean; // overall toggle for active curtains
   closeCurtainMessage?: string; // elegant notification text shown inside the curtain
+  updatedAt?: number; // timestamp for conflict resolution
+  menuUpdatedAt?: number; // timestamp for menu conflict resolution
 }
 
 export interface PaymentGateway {
@@ -113,13 +136,28 @@ export interface UserAuthStore {
   loyaltyPoints: number;
 }
 
+export interface EnquiryThreadMessage {
+  id: string;
+  sender: 'customer' | 'agent' | 'system';
+  message: string;
+  createdAt: string;
+  attachmentUrl?: string;
+}
+
 export interface Enquiry {
   id: string;
   name: string;
   email?: string;
+  mobile?: string;
+  category?: 'General Inquiry' | 'Technical Support' | 'Billing & Payments' | 'Orders & Delivery' | 'Returns & Refunds' | 'Account Issues' | 'Feedback & Suggestions';
   subject: string;
   message: string;
-  status: 'Pending' | 'Resolved';
+  status: 'Open' | 'In Progress' | 'Waiting for Customer' | 'Resolved' | 'Closed' | 'Pending';
+  priority?: 'Low' | 'Medium' | 'High' | 'Critical';
+  assignedAgent?: string;
+  attachments?: string[];
+  thread?: EnquiryThreadMessage[];
   replyText?: string;
   createdAt: string;
+  updatedAt?: string;
 }
