@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MenuItem, Order, Review, Coupon, CustomConfig, PaymentGateway, PaymentSettings, Enquiry, Feedback } from '../types';
+import AdvancedMenuManager from './AdvancedMenuManager';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
@@ -139,7 +140,7 @@ export default function AdminDashboard({
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [newItemName, setNewItemName] = useState('');
-  const [newItemPrice, setNewItemPrice] = useState(150);
+  const [newItemPrice, setNewItemPrice] = useState<number | ''>('');
   const [newItemDesc, setNewItemDesc] = useState('');
   const [newItemCat, setNewItemCat] = useState<MenuItem['category']>('Lunch');
   const [newItemImg, setNewItemImg] = useState('');
@@ -418,7 +419,7 @@ export default function AdminDashboard({
         setIsAddingNew(false);
         setEditingItem(null);
         setNewItemName('');
-        setNewItemPrice(150);
+        setNewItemPrice('');
         setNewItemDesc('');
         setNewItemImg('');
         setMenuFormError('');
@@ -934,7 +935,7 @@ export default function AdminDashboard({
       </div>
 
       {/* Main Panel Content Scroll frame */}
-      <div className="flex-1 overflow-y-auto p-8 bg-neutral-50 max-h-[85vh]">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#FAF9F6]/40 max-h-[85vh] transition-all duration-300">
         
         {/* STATS ANALYTICS TAB */}
         {activeTab === 'Stats' && (
@@ -1058,6 +1059,13 @@ export default function AdminDashboard({
 
         {/* MANAGE CULINARY MENU (Add/Edit) */}
         {activeTab === 'Menu' && (
+          <AdvancedMenuManager 
+            menu={menu} 
+            onUpdateMenu={onUpdateMenu} 
+            config={config} 
+          />
+        )}
+        {activeTab === 'DisabledOldMenu' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center border-b pb-4">
               <div>
@@ -1117,10 +1125,10 @@ export default function AdminDashboard({
                       <input
                         type="number"
                         required
-                        min={10}
+                        min={0}
                         max={10000}
                         value={newItemPrice}
-                        onChange={(e) => setNewItemPrice(Number(e.target.value))}
+                        onChange={(e) => setNewItemPrice(e.target.value === '' ? '' : Number(e.target.value))}
                         className="w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-600"
                       />
                     </div>

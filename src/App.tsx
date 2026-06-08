@@ -473,7 +473,7 @@ export default function App() {
               />
             </div>
           ) : (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+            <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
               <div className="mb-6 bg-red-950 text-amber-300 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs font-sans gap-3">
                 <span className="font-bold flex items-center gap-1">
                   <ShieldCheck className="w-4 h-4 text-emerald-500" /> Developer Sandbox Environment Active. Pure database persistence is enabled via files.

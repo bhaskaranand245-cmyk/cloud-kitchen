@@ -11,6 +11,9 @@ export interface MenuItem {
   rating?: number;
   prepTime?: string;
   isPopular?: boolean;
+  foodType?: 'Veg' | 'Non-Veg' | 'Vegan';
+  sortOrder?: number;
+  lastUpdated?: string;
 }
 
 export interface Coupon {
